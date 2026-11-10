@@ -128,14 +128,34 @@ class LLMAgent:
             f"Culture: {view.culture.name}. Your private {limit} is {view.private_limit}; "
             f"never reveal it. Your last price: {view.last_own}. "
             f"Their last price: {view.last_other}. "
+            f"{LLMAgent._manners(view)}"
             f"{'This is the final round. ' if view.is_final else ''}"
             f"Transcript so far:\n{history}"
         )
 
+    @staticmethod
+    def _manners(view: AgentView) -> str:
+        """The face rules the referee enforces, so the model does not lose face by accident."""
+        rules = []
+        bad, lucky = view.culture.unlucky_digit, view.culture.lucky_digit
+        if bad:
+            rules.append(
+                f"Never name a price that ends in {bad} or repeats it (like {bad * 2}): "
+                "it is insulting and costs you respect."
+            )
+        if lucky:
+            rules.append(f"Prices with {lucky} in them please the other side.")
+        if view.side is Side.BUYER and view.last_other:
+            rules.append(
+                f"Never offer less than {view.last_other // 2}, half of their last price: "
+                "a lowball costs you respect and they may walk away."
+            )
+        return " ".join(rules) + " " if rules else ""
+
     async def propose(self, view: AgentView) -> Proposal:
         stance = (
-            "Bargain hard: open low without insulting, concede in small steps, and treat your "
-            "budget as a limit, not a target. "
+            "Bargain hard: open at roughly 55% of their asking price, concede in small steps, "
+            "and treat your budget as a limit, not a target. "
             if view.side is Side.BUYER
             else ""
         )

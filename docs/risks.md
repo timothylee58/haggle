@@ -21,6 +21,6 @@ Things the sandbox taught us:
 | Tracking read-back returns nothing | Closed: read back after capture | None |
 | MCP or toolkit lacks authorize-only | Decided: stay on REST (see ADR 1, based on docs, no live MCP trial) | Revisit if MCP gains authorize, void and capture-later tools |
 | Return URL points at localhost | Fixed in code: per-deal page. `FRONTEND_URL` must be set for any public demo | Set `FRONTEND_URL` |
-| Real Claude agents behave differently from rule agents | Untested, no API key | Run `scripts.gate --llm`. Code still enforces caps and prices. |
+| Real Claude agents behave differently from rule agents | Tested on 2026-11-10 with `claude-sonnet-5-5` on 3 deals (guitar, bike, tight-overlap laptop): all closed inside both caps. Early runs lowballed and named insulting numbers because the prompt never listed the face rules; fixed. Claude can still pay near the cap (bike: 588 on a 450 to 600 range), and only 3 runs were checked. | Run more deals with `scripts.run_negotiation --llm` before trusting the average. Code still enforces caps and prices. |
 | Deadlines are placeholders | Open | Tune `Deadlines` to the real authorization window. |
 | Shield routes have no login | Open | Anyone with a deal link can act on it. Fix before any public demo. |
