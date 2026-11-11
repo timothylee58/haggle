@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, currentRound, emptyMatch, leadingSeat, meterPosition, refereeCall, resultHeadline, seatsOf, warHeadline, type Seat, type Turn } from "./negotiation";
+import { applyEvent, currentRound, emptyMatch, leadingSeat, marketLine, meterPosition, refereeCall, resultHeadline, seatsOf, warHeadline, type Seat, type Turn } from "./negotiation";
 
 const turn: Turn = {
   turn: 1, side: "buyer", action: "offer", price: 950, requested_price: 100000, overridden: true,
@@ -63,6 +63,31 @@ describe("bidding war state", () => {
     const match = applyEvent(emptyMatch, { type: "negotiation_started", data: { item: "x", currency: "MYR", opening_ask: 1288, max_rounds: 6 } });
     expect(match.mode).toBe("duel");
     expect(currentRound(applyEvent(match, { type: "turn", data: turn }))).toBe(1);
+  });
+});
+
+describe("reference price", () => {
+  const market = { title: "Yamaha FG800", price: 250, currency: "USD", retailer: "a.example", url: null };
+  const started = applyEvent(emptyMatch, {
+    type: "negotiation_started",
+    data: { item: "Guitar", currency: "USD", opening_ask: 250, max_rounds: 6, market },
+  });
+  it("is read from the start event, and absent when none was picked", () => {
+    expect(started.market).toEqual(market);
+    expect(applyEvent(emptyMatch, { type: "negotiation_started", data: { item: "x", currency: "MYR", opening_ask: 1, max_rounds: 6 } }).market).toBeNull();
+    expect(marketLine(emptyMatch)).toBeNull();
+  });
+  it("shows the retail price while the match runs, then how the deal compares", () => {
+    expect(marketLine(started)).toBe("Retail USD 250 at a.example");
+    const below = applyEvent(started, { type: "negotiation_ended", data: { status: "deal", final_price: 180 } });
+    expect(marketLine(below)).toBe("Retail USD 250 at a.example, deal is 28% below retail");
+    const above = applyEvent(started, { type: "negotiation_ended", data: { status: "deal", final_price: 275 } });
+    expect(marketLine(above)).toContain("10% above retail");
+  });
+  it("makes no comparison across currencies or without a deal", () => {
+    const other = applyEvent({ ...started, currency: "MYR" }, { type: "negotiation_ended", data: { status: "deal", final_price: 180 } });
+    expect(marketLine(other)).toBe("Retail USD 250 at a.example");
+    expect(marketLine(applyEvent(started, { type: "negotiation_ended", data: { status: "seller_walked", final_price: null } }))).toBe("Retail USD 250 at a.example");
   });
 });
 

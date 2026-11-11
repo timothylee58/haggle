@@ -173,16 +173,21 @@ async def client(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[httpx.AsyncCl
 
 
 async def test_api_flow_and_public_stream_hides_private_data(client: httpx.AsyncClient) -> None:
-    deal = (await client.post("/negotiations", json=BODY)).json()["deal_id"]
+    started = (await client.post("/negotiations", json=BODY)).json()
+    deal, owner = started["deal_id"], {"x-deal-token": started["owner_token"]}
     await client.get(f"/negotiations/{deal}/events")  # waits for the negotiation to end
     base = f"/deals/{deal}/shield"
-    assert (await client.post(f"{base}/capture")).status_code == 409
-    assert (await client.post(f"{base}/approve")).status_code == 200
-    assert (await client.post(f"{base}/authorize")).status_code == 200
-    assert (await client.post(f"{base}/ship", json={"tracking_number": ""})).status_code == 422
-    assert (await client.post(f"{base}/ship", json={"tracking_number": "TRK"})).status_code == 200
-    assert (await client.post(f"{base}/deliver")).json()["state"] == "captured"
-    assert (await client.post(f"{base}/refund")).json()["state"] == "refunded"
+    assert (await client.post(f"{base}/capture", headers=owner)).status_code == 409
+    assert (await client.post(f"{base}/approve", headers=owner)).status_code == 200
+    assert (await client.post(f"{base}/authorize", headers=owner)).status_code == 200
+    assert (
+        await client.post(f"{base}/ship", json={"tracking_number": ""}, headers=owner)
+    ).status_code == 422
+    assert (
+        await client.post(f"{base}/ship", json={"tracking_number": "TRK"}, headers=owner)
+    ).status_code == 200
+    assert (await client.post(f"{base}/deliver", headers=owner)).json()["state"] == "captured"
+    assert (await client.post(f"{base}/refund", headers=owner)).json()["state"] == "refunded"
 
     response = await client.get(f"{base}/events")
     frames = parse_sse(response.text)
@@ -212,16 +217,17 @@ WAR = {
 
 async def _run_war(
     client: httpx.AsyncClient, body: dict[str, object] = WAR
-) -> tuple[str, list[dict[str, str]]]:
-    deal = (await client.post("/bidding-wars", json=body)).json()["deal_id"]
+) -> tuple[str, list[dict[str, str]], dict[str, str]]:
+    started = (await client.post("/bidding-wars", json=body)).json()
+    deal = started["deal_id"]
     response = await client.get(f"/negotiations/{deal}/events")  # waits for the war to end
-    return deal, parse_sse(response.text)
+    return deal, parse_sse(response.text), {"x-deal-token": started["owner_token"]}
 
 
 async def test_api_bidding_war_streams_every_move_without_private_limits(
     client: httpx.AsyncClient,
 ) -> None:
-    _, frames = await _run_war(client)
+    _, frames, _ = await _run_war(client)
     kinds = [f["event"] for f in frames]
     assert kinds[0] == "negotiation_started" and kinds[-1] == ENDED and kinds.count("turn") > 10
     started = json.loads(frames[0]["data"])
@@ -248,13 +254,13 @@ async def test_api_bidding_war_winner_uses_their_own_cap_in_the_shield(
 ) -> None:
     from uuid import UUID
 
-    deal, frames = await _run_war(client)
+    deal, frames, owner = await _run_war(client)
     ended = json.loads(frames[-1]["data"])
     cap = {"Aiman": 951, "Mei Ling": 1004, "Ravi": 887}[ended["winner"]["name"]]
     assert await app.state.log.budget_cap(UUID(deal)) == cap * 100
     base = f"/deals/{deal}/shield"
-    assert (await client.post(f"{base}/approve")).status_code == 200
-    assert (await client.post(f"{base}/authorize")).status_code == 200
+    assert (await client.post(f"{base}/approve", headers=owner)).status_code == 200
+    assert (await client.post(f"{base}/authorize", headers=owner)).status_code == 200
     state = (await client.get(base)).json()
     assert state["state"] == "authorized" and state["amount_minor"] == ended["final_price"] * 100
 
@@ -286,3 +292,185 @@ async def test_api_bidding_war_llm_needs_a_key(
 ) -> None:
     monkeypatch.setattr(settings, "anthropic_api_key", "")
     assert (await client.post("/bidding-wars", json={**WAR, "use_llm": True})).status_code == 503
+
+
+async def test_only_the_person_who_started_a_match_can_move_its_money(
+    client: httpx.AsyncClient,
+) -> None:
+    started = (await client.post("/negotiations", json=BODY)).json()
+    deal, owner = started["deal_id"], started["owner_token"]
+    await client.get(f"/negotiations/{deal}/events")
+    base = f"/deals/{deal}/shield"
+    for headers in ({}, {"x-deal-token": "not-the-token"}, {"x-deal-token": owner[::-1]}):
+        for step in ("approve", "authorize", "deliver", "capture", "cancel", "refund"):
+            assert (await client.post(f"{base}/{step}", headers=headers)).status_code == 403
+    assert (
+        await client.post(
+            f"{base}/ship", json={"tracking_number": "T"}, headers={"x-deal-token": "x"}
+        )
+    ).status_code == 403
+    # Nothing moved, and anyone can still watch the deal and the negotiation.
+    assert (await client.get(base)).json()["state"] == "negotiated"
+    assert (await client.get(f"/negotiations/{deal}/events")).status_code == 200
+    assert (
+        await client.post(f"{base}/approve", headers={"x-deal-token": owner})
+    ).status_code == 200
+
+
+async def test_the_owner_token_is_stored_only_as_a_hash(client: httpx.AsyncClient) -> None:
+    from uuid import UUID
+
+    started = (await client.post("/negotiations", json=BODY)).json()
+    stored = await app.state.log.access_hash(UUID(started["deal_id"]))
+    assert stored and stored != started["owner_token"] and len(stored) == 64
+    assert (
+        started["owner_token"]
+        not in (await client.get(f"/negotiations/{started['deal_id']}/events")).text
+    )
+
+
+async def test_a_deal_from_before_tokens_cannot_be_moved(client: httpx.AsyncClient) -> None:
+    deal = uuid4()
+    await app.state.bus.publish(deal, "negotiation_started", {"currency": "MYR"})
+    await app.state.bus.publish(deal, ENDED, {"status": "deal", "final_price": 800})
+    assert (
+        await client.post(f"/deals/{deal}/shield/approve", headers={"x-deal-token": "anything"})
+    ).status_code == 403
+    assert (
+        await client.post(f"/deals/{uuid4()}/shield/approve", headers={"x-deal-token": "anything"})
+    ).status_code == 404
+
+
+async def test_matches_are_limited_per_network_address(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "rate_limits_enabled", True)
+    monkeypatch.setattr(settings, "matches_per_hour_per_ip", 2)
+    monkeypatch.setattr(settings, "rate_limit_prefix", f"test-{uuid4().hex}")
+    codes = [(await client.post("/negotiations", json=BODY)).status_code for _ in range(4)]
+    assert codes == [201, 201, 429, 429]
+    limited = await client.post("/bidding-wars", json=WAR)
+    assert limited.status_code == 429 and limited.headers["retry-after"]
+
+
+async def test_claude_matches_can_be_switched_off_and_capped(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-test")
+    monkeypatch.setattr(settings, "llm_matches_per_day", 0)
+    off = await client.post("/negotiations", json={**BODY, "use_llm": True})
+    assert off.status_code == 503 and "turned off" in off.json()["detail"]
+    assert (await client.get("/features")).json()["claude"] is False
+    monkeypatch.setattr(settings, "llm_matches_per_day", 5)
+    assert (await client.get("/features")).json()["claude"] is True
+
+
+async def test_features_report_what_the_server_can_do(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "channel3_api_key", "")
+    assert (await client.get("/features")).json() == {
+        "claude": False,
+        "market_price": False,
+        "payments": "simulated",
+    }
+    monkeypatch.setattr(settings, "channel3_api_key", "key")
+    assert (await client.get("/features")).json()["market_price"] is True
+
+
+async def test_market_search_is_off_without_a_key_and_clear_about_it(
+    client: httpx.AsyncClient,
+) -> None:
+    app.state.market = None
+    response = await client.get("/market/search", params={"q": "yamaha fg800"})
+    assert response.status_code == 503 and "not set up" in response.json()["detail"]
+    assert (await client.get("/market/search", params={"q": "x"})).status_code == 422
+
+
+async def test_market_search_returns_real_shaped_results_and_uses_the_cache(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.market import Channel3Client
+    from tests.test_market import PAYLOAD
+
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=PAYLOAD)
+
+    monkeypatch.setattr(settings, "rate_limit_prefix", f"test-{uuid4().hex}")
+    app.state.market = Channel3Client("k", transport=httpx.MockTransport(handler))
+    query = {"q": f"yamaha {uuid4().hex[:6]}"}
+    first = (await client.get("/market/search", params=query)).json()
+    assert (await client.get("/market/search", params=query)).json() == first
+    assert calls == 1
+    assert first["stats"]["median"] == 299 and first["products"][0]["retailer"] == "a.example"
+    assert "x-api-key" not in str(first) and "k" != first["query"]
+
+
+async def test_market_search_failures_are_a_clean_502(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.market import Channel3Client
+
+    monkeypatch.setattr(settings, "rate_limit_prefix", f"test-{uuid4().hex}")
+    app.state.market = Channel3Client(
+        "k", transport=httpx.MockTransport(lambda r: httpx.Response(429))
+    )
+    response = await client.get("/market/search", params={"q": f"busy {uuid4().hex[:6]}"})
+    assert response.status_code == 502 and "busy" in response.json()["detail"]
+
+
+async def test_price_checks_are_limited_per_network_address(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.market import Channel3Client
+    from tests.test_market import PAYLOAD
+
+    monkeypatch.setattr(settings, "rate_limits_enabled", True)
+    monkeypatch.setattr(settings, "market_checks_per_hour_per_ip", 2)
+    monkeypatch.setattr(settings, "rate_limit_prefix", f"test-{uuid4().hex}")
+    app.state.market = Channel3Client(
+        "k", transport=httpx.MockTransport(lambda r: httpx.Response(200, json=PAYLOAD))
+    )
+    codes = [
+        (await client.get("/market/search", params={"q": f"item {i}"})).status_code
+        for i in range(4)
+    ]
+    assert codes == [200, 200, 429, 429]
+
+
+async def test_a_reference_price_is_shown_to_spectators_and_bad_ones_are_refused(
+    client: httpx.AsyncClient,
+) -> None:
+    market = {
+        "title": "Yamaha FG800",
+        "price": 249.99,
+        "currency": "USD",
+        "retailer": "a.example",
+        "url": "https://a.example/p",
+    }
+    started = (await client.post("/negotiations", json={**BODY, "market": market})).json()
+    frames = parse_sse((await client.get(f"/negotiations/{started['deal_id']}/events")).text)
+    assert json.loads(frames[0]["data"])["market"] == market
+    war = (await client.post("/bidding-wars", json={**WAR, "market": market})).json()
+    assert (
+        json.loads(
+            parse_sse((await client.get(f"/negotiations/{war['deal_id']}/events")).text)[0]["data"]
+        )["market"]
+        == market
+    )
+    plain = (await client.post("/negotiations", json=BODY)).json()
+    assert "market" not in json.loads(
+        parse_sse((await client.get(f"/negotiations/{plain['deal_id']}/events")).text)[0]["data"]
+    )
+    for bad in (
+        {**market, "price": 0},
+        {**market, "currency": "usd"},
+        {**market, "url": "javascript:alert(1)"},
+        {**market, "title": ""},
+    ):
+        assert (await client.post("/negotiations", json={**BODY, "market": bad})).status_code == 422

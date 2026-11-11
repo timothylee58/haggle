@@ -1,0 +1,72 @@
+# Render Blueprint for Haggle: a Postgres database, a Key Value (Redis) instance, the API and the web app.
+# Deploy steps, costs and every environment variable are in docs/deploy.md.
+#
+# Region is Render's default (Oregon) for everything. The API reaches Postgres and Key Value over Render's
+# private network, so keep all three in the same region if you change it.
+
+databases:
+  - name: haggle-db
+    databaseName: haggle
+    user: haggle
+    postgresMajorVersion: "17"
+
+services:
+  # Only wakes the event stream up. Postgres is the source of truth, so losing this loses nothing.
+  - type: keyvalue
+    name: haggle-redis
+    plan: free
+    ipAllowList: [] # private network only
+
+  - type: web
+    name: haggle-api
+    runtime: python
+    rootDir: services/api
+    # No plan is set, so Render uses its smallest paid instance. That is deliberate: free web services sleep
+    # after 15 idle minutes and take about a minute to wake, which a judge would see as a broken demo, and
+    # preDeployCommand (migrations) is not available on free instances.
+    buildCommand: uv sync --frozen
+    preDeployCommand: uv run alembic upgrade head
+    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.11
+      - key: DATABASE_URL
+        fromDatabase:
+          name: haggle-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: haggle-redis
+          property: connectionString
+      # The web app's public address. Used for CORS and for where PayPal sends the buyer back.
+      - key: FRONTEND_URL
+        sync: false
+      # Matches that may use Claude, across the whole server per day. Each one spends real API credit.
+      # Set 0 to turn Claude off entirely.
+      - key: LLM_MATCHES_PER_DAY
+        value: "25"
+      # Optional. Without them the app runs with simulated payments, rule-based agents and no price check.
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CHANNEL3_API_KEY
+        sync: false
+
+  - type: web
+    name: haggle-web
+    runtime: node
+    rootDir: frontend
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # The API's public address. Next.js reads it when it builds, so changing it needs a redeploy.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false

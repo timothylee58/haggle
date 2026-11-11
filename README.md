@@ -43,6 +43,9 @@ Funds are authorized, never captured, until delivery is confirmed. A missed ship
 | LangGraph negotiation loop | done, tested with rule and scripted agents; real LLM **unverified** |
 | Bidding war: one seller, two to four buyers | done, tested with rule agents; real LLM **unverified** |
 | Spectator UI | done, checked in the browser with rule agents |
+| Owner-only Shield actions, rate limits, Claude daily cap | done, tested; checked in the browser |
+| Channel3 price check | done, tested against a **local stand-in only**; never run against the live service |
+| Render deploy (`render.yaml`) | blueprint validates against Render's schema; **not deployed yet** |
 
 ## Run
 
@@ -70,8 +73,15 @@ The web app has three routes: `/` is the landing page, `/play` is the start form
 - `POST /bidding-wars` starts one seller against two to four buyers: `item`, `seller_floor`, `opening_ask`, and `bidders` (each with `name`, a private `budget_cap`, and an optional `style`: `balanced`, `aggressive`, `patient` or `lowballer`). It returns a `deal_id` and streams on the same events endpoint, so the Shield works unchanged for the winner.
 - `GET /negotiations/{deal_id}/events` streams SSE events: `negotiation_started`, `turn`, `negotiation_ended`. Reconnects resume through `Last-Event-ID`.
 
-- `/deals/{deal_id}/shield` reads the Shield state. POST to `/approve`, `/authorize`, `/ship`, `/deliver`, `/capture`, `/cancel` or `/refund` under it to act. **These routes have no login yet.**
+- Both start endpoints return `{"deal_id", "owner_token"}`. The token is shown once; only its hash is stored. They also take an optional `market` reference price (see Channel3 below).
+- `/deals/{deal_id}/shield` reads the Shield state. POST to `/approve`, `/authorize`, `/ship`, `/deliver`, `/capture`, `/cancel` or `/refund` under it to act. **These need the `x-deal-token` header** from the start response; anyone else gets 403, so spectators can watch but not move money.
 - `GET /deals/{deal_id}/shield/events` streams a public view with no payment IDs.
+- `GET /features` says what this server has switched on (`claude`, `market_price`, `payments`).
+- `GET /market/search?q=` returns real products and a low/median/high from Channel3 (503 if no key is set).
+
+## Deploy and Channel3
+
+`render.yaml` deploys the API, web app, Postgres and Key Value to Render. Steps, costs and every environment variable are in [docs/deploy.md](docs/deploy.md), including the Channel3 setup. Without a Channel3 key the price check is simply hidden.
 
 ## Watch a negotiation
 

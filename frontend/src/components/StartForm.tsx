@@ -1,15 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PriceCheck } from "@/components/PriceCheck";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { fetchFeatures, shortTitle, suggestPrices, toSnapshot, type Features, type MarketProduct, type MarketSnapshot } from "@/lib/market";
+import { saveOwnerToken } from "@/lib/ownerToken";
 import { API_URL } from "@/lib/useMatch";
 
 const inputClass = "h-11 bg-field text-base tabular-nums";
@@ -72,7 +75,7 @@ const DEFAULT_BUYERS = [
 ];
 const CHIP = ["bg-bidder-1", "bg-bidder-2", "bg-bidder-3", "bg-bidder-4"];
 
-function BuyerRow({ index }: { index: number }) {
+function BuyerRow({ index, cap }: { index: number; cap?: number }) {
   const buyer = DEFAULT_BUYERS[index];
   return (
     <div className="grid grid-cols-[1fr_7.5rem] items-center gap-2">
@@ -80,7 +83,7 @@ function BuyerRow({ index }: { index: number }) {
         <span aria-hidden className={`absolute left-3 top-1/2 size-3 -translate-y-1/2 rounded-sm ${CHIP[index]}`} />
         <Input aria-label={`Buyer ${index + 1} name`} className={`${inputClass} pl-9`} name={`buyer_name_${index}`} required maxLength={30} defaultValue={buyer.name} />
       </div>
-      <Input aria-label={`${buyer.name}'s budget cap`} className={inputClass} name={`buyer_cap_${index}`} type="number" min={1} max={10000000} step={1} required defaultValue={buyer.cap} inputMode="numeric" />
+      <Input aria-label={`${buyer.name}'s budget cap`} className={inputClass} name={`buyer_cap_${index}`} type="number" min={1} max={10000000} step={1} required defaultValue={cap ?? buyer.cap} inputMode="numeric" />
     </div>
   );
 }
@@ -92,6 +95,22 @@ export function StartForm() {
   const [culture, setCulture] = useState("malaysian_chinese");
   const [useLlm, setUseLlm] = useState(false);
   const [buyers, setBuyers] = useState(1);
+  const [features, setFeatures] = useState<Features | null>(null);
+  const [currency, setCurrency] = useState("MYR");
+  const [market, setMarket] = useState<MarketSnapshot | null>(null);
+  // A price check re-keys the fields it fills in, so their starting values change and the rest stay as typed.
+  const [prefill, setPrefill] = useState<{ key: number; item?: string; ask?: number; floor?: number; budget?: number; caps?: number[] }>({ key: 0 });
+
+  useEffect(() => {
+    fetchFeatures().then(setFeatures);
+  }, []);
+
+  function applyPrice(product: MarketProduct) {
+    const { ask, floor, caps } = suggestPrices(product.price);
+    setCurrency(product.currency);
+    setMarket(toSnapshot(product));
+    setPrefill((current) => ({ key: current.key + 1, item: shortTitle(product.title), ask, floor, budget: caps[0], caps }));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,8 +131,10 @@ export function StartForm() {
         seller_floor: Number(data.get("seller_floor")),
         opening_ask: Number(data.get("opening_ask")),
         culture,
+        currency,
+        ...(market ? { market } : {}),
         max_rounds: Number(data.get("max_rounds")),
-        use_llm: useLlm,
+        use_llm: useLlm && features?.claude !== false,
       };
       const response =
         buyers === 1
@@ -127,6 +148,7 @@ export function StartForm() {
             });
       const body = await response.json();
       if (!response.ok) throw new Error(explain(body.detail));
+      if (body.owner_token) saveOwnerToken(body.deal_id, body.owner_token);
       router.push(`/deals/${body.deal_id}`);
     } catch (caught) {
       const offline = caught instanceof TypeError;
@@ -139,8 +161,17 @@ export function StartForm() {
     <form onSubmit={submit} className="grid gap-8">
       <div className="grid gap-2">
         <Label htmlFor="item">What&apos;s being sold</Label>
-        <Input id="item" className={inputClass} name="item" required maxLength={200} defaultValue="Vintage Yamaha guitar" />
+        <Input key={`item-${prefill.key}`} id="item" className={inputClass} name="item" required maxLength={200} defaultValue={prefill.item ?? "Vintage Yamaha guitar"} />
       </div>
+
+      {features?.market_price && (
+        <PriceCheck
+          getQuery={() => (document.getElementById("item") as HTMLInputElement | null)?.value ?? ""}
+          onUse={applyPrice}
+          selected={market}
+          onClear={() => setMarket(null)}
+        />
+      )}
 
       <div className="grid gap-8 sm:grid-cols-2">
         <fieldset className="grid content-start gap-4 border-t-4 border-buyer pt-4">
@@ -166,12 +197,12 @@ export function StartForm() {
             </div>
           </div>
           {buyers === 1 ? (
-            <Field label="Budget cap" name="budget_cap" defaultValue={950} hint="Enforced in code. Hidden from spectators." />
+            <Field key={`budget-${prefill.key}`} label={`Budget cap (${currency})`} name="budget_cap" defaultValue={prefill.budget ?? 950} hint="Enforced in code. Hidden from spectators." />
           ) : (
             <>
               <div className="grid gap-3">
                 {Array.from({ length: buyers }, (_, i) => (
-                  <BuyerRow key={i} index={i} />
+                  <BuyerRow key={`${i}-${prefill.key}`} index={i} cap={prefill.caps?.[i]} />
                 ))}
               </div>
               <p className="text-sm text-muted-foreground">Name, then budget cap. Each buyer bids in turn, and the seller holds out longer when rivals are bidding. Budgets are enforced in code and hidden from spectators.</p>
@@ -181,8 +212,8 @@ export function StartForm() {
         <fieldset className="grid content-start gap-4 border-t-4 border-seller pt-4">
           <legend className="sr-only">Seller</legend>
           <p aria-hidden className="font-display text-2xl font-bold uppercase text-seller">Seller</p>
-          <Field label="Opening ask" name="opening_ask" defaultValue={1288} />
-          <Field label="Lowest price" name="seller_floor" defaultValue={700} hint="Enforced in code. Hidden from spectators." />
+          <Field key={`ask-${prefill.key}`} label={`Opening ask (${currency})`} name="opening_ask" defaultValue={prefill.ask ?? 1288} />
+          <Field key={`floor-${prefill.key}`} label={`Lowest price (${currency})`} name="seller_floor" defaultValue={prefill.floor ?? 700} hint="Enforced in code. Hidden from spectators." />
         </fieldset>
       </div>
 
@@ -205,10 +236,12 @@ export function StartForm() {
       </div>
 
       <div className="flex items-start gap-3">
-        <Switch id="use_llm" checked={useLlm} onCheckedChange={setUseLlm} className="mt-0.5" />
+        <Switch id="use_llm" checked={useLlm && features?.claude !== false} disabled={features?.claude === false} onCheckedChange={setUseLlm} className="mt-0.5" />
         <div className="grid gap-1">
           <Label htmlFor="use_llm">Let Claude play both sides</Label>
-          <p className="text-sm text-muted-foreground">Off runs rule-based agents with no API key.</p>
+          <p className="text-sm text-muted-foreground">
+            {features?.claude === false ? "Claude is turned off on this server. Rule-based agents play instead." : "Off runs rule-based agents with no API key."}
+          </p>
         </div>
       </div>
 

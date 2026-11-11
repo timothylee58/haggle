@@ -1,3 +1,5 @@
+import type { MarketSnapshot } from "./market";
+
 export type Side = "buyer" | "seller";
 export type Action = "offer" | "accept" | "walk";
 
@@ -31,6 +33,7 @@ export type Turn = {
 };
 
 export type Match = {
+  market: MarketSnapshot | null;
   mode: "duel" | "bidding_war";
   bidders: BidderRef[];
   item: string;
@@ -43,6 +46,7 @@ export type Match = {
 };
 
 export const emptyMatch: Match = {
+  market: null,
   mode: "duel",
   bidders: [],
   item: "",
@@ -57,7 +61,7 @@ export const emptyMatch: Match = {
 export type MatchEvent =
   | {
       type: "negotiation_started";
-      data: { item: string; currency: string; opening_ask: number; max_rounds: number; mode?: string; bidders?: BidderRef[] };
+      data: { item: string; currency: string; opening_ask: number; max_rounds: number; mode?: string; bidders?: BidderRef[]; market?: MarketSnapshot };
     }
   | { type: "turn"; data: Turn }
   | { type: "negotiation_ended"; data: { status: string; final_price: number | null; winner?: BidderRef | null } };
@@ -73,6 +77,7 @@ export function applyEvent(match: Match, event: MatchEvent): Match {
         maxRounds: event.data.max_rounds,
         mode: event.data.mode === "bidding_war" ? "bidding_war" : "duel",
         bidders: event.data.bidders ?? [],
+        market: event.data.market ?? null,
       };
     case "turn":
       if (match.turns.some((t) => t.turn === event.data.turn)) return match;
@@ -162,4 +167,19 @@ export function warHeadline(ended: NonNullable<Match["ended"]>, currency: string
   }
   if (ended.status === "buyer_walked") return "Every buyer walked away";
   return resultHeadline(ended.status, currency, ended.finalPrice);
+}
+
+/** How the match relates to the real-world price, when the person picked one. */
+export function marketLine(match: Match): string | null {
+  const market = match.market;
+  if (!market) return null;
+  const shown = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const where = market.retailer ? ` at ${market.retailer}` : "";
+  let line = `Retail ${market.currency} ${shown(market.price)}${where}`;
+  const price = match.ended?.status === "deal" ? match.ended.finalPrice : null;
+  if (price !== null && match.currency === market.currency && market.price > 0) {
+    const percent = Math.round((Math.abs(market.price - price) / market.price) * 100);
+    if (percent > 0) line += `, deal is ${percent}% ${price < market.price ? "below" : "above"} retail`;
+  }
+  return line;
 }

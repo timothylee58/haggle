@@ -18,9 +18,11 @@ from app.engine.lucky import MALAYSIAN_CHINESE, NEUTRAL
 from app.events.log import EventLog
 from app.events.runner import NegotiationRunner
 from app.events.stream import EventBus
+from app.market import Channel3Client, MarketError, cached_search
 from app.negotiation.agents import Agent, LLMAgent, RuleAgent
 from app.negotiation.bidding import Bidder, BiddingConfig, rule_buyers
 from app.negotiation.graph import NegotiationConfig
+from app.security import hash_token, new_token, token_matches, window, within_limit
 from app.shield.desk import SHIELD_EVENT, DealDesk, DeskError, public_view, shield_stream_done
 from app.shield.gateway import FakeGateway, PaymentGateway, PayPalGateway
 
@@ -32,6 +34,12 @@ CULTURES = {"malaysian_chinese": MALAYSIAN_CHINESE, "neutral": NEUTRAL}
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = create_async_engine(settings.database_url)
     redis = aioredis.from_url(settings.redis_url)
+    app.state.redis = redis
+    app.state.market = (
+        Channel3Client(settings.channel3_api_key, settings.channel3_base_url)
+        if settings.channel3_api_key
+        else None
+    )
     app.state.log = EventLog(async_sessionmaker(engine, expire_on_commit=False))
     app.state.bus = EventBus(app.state.log, redis)
     app.state.runner = NegotiationRunner(app.state.bus)
@@ -51,6 +59,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await app.state.runner.shutdown()
     if isinstance(gateway, PayPalGateway):
         await gateway.aclose()
+    if app.state.market is not None:
+        await app.state.market.aclose()
     await redis.aclose()
     await engine.dispose()
 
@@ -58,10 +68,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Haggle API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class MarketSnapshot(BaseModel):
+    """A reference price the person picked from the price check. It is shown to spectators, nothing more."""
+
+    title: str = Field(min_length=1, max_length=160)
+    price: float = Field(gt=0, le=MAX_PRICE)
+    currency: str = Field(pattern="^[A-Z]{3}$")
+    retailer: str | None = Field(default=None, max_length=80)
+    url: str | None = Field(default=None, max_length=300, pattern=r"^https?://")
 
 
 class StartNegotiation(BaseModel):
@@ -73,12 +93,83 @@ class StartNegotiation(BaseModel):
     culture: Literal["malaysian_chinese", "neutral"] = "malaysian_chinese"
     max_rounds: int = Field(default=6, ge=1, le=20)
     use_llm: bool = False
+    market: MarketSnapshot | None = None
 
     @model_validator(mode="after")
     def ask_meets_floor(self) -> "StartNegotiation":
         if self.opening_ask < self.seller_floor:
             raise ValueError("opening_ask cannot be below seller_floor")
         return self
+
+
+async def _admit(request: Request, use_llm: bool) -> None:
+    """The public-demo limits, applied before a match is created."""
+    if use_llm and settings.llm_matches_per_day == 0:
+        raise HTTPException(
+            503, "Claude matches are turned off on this server. Use the rule-based agents."
+        )
+    if not settings.rate_limits_enabled:
+        return
+    redis = request.app.state.redis
+    ip = request.client.host if request.client else "unknown"
+    prefix = settings.rate_limit_prefix
+    if not await within_limit(
+        redis, f"{prefix}:matches:{ip}:{window(3600)}", settings.matches_per_hour_per_ip, 3600
+    ):
+        raise HTTPException(
+            429,
+            "Too many matches from your network. Try again in a while.",
+            headers={"Retry-After": "600"},
+        )
+    if use_llm and not await within_limit(
+        redis, f"{prefix}:llm:{window(86400)}", settings.llm_matches_per_day, 86400
+    ):
+        raise HTTPException(429, "Today's Claude demo limit is used up. Try the rule-based agents.")
+
+
+async def _issue_owner_token(request: Request, deal_id: UUID) -> str:
+    """The token is returned once, to whoever started the match. Only its hash is stored."""
+    token = new_token()
+    log: EventLog = request.app.state.log
+    await log.save_access(deal_id, hash_token(token))
+    return token
+
+
+def _market(snapshot: MarketSnapshot | None) -> dict[str, object] | None:
+    return snapshot.model_dump() if snapshot else None
+
+
+@app.get("/market/search")
+async def market_search(
+    request: Request, q: Annotated[str, Query(min_length=2, max_length=100)]
+) -> dict[str, object]:
+    """Real products and prices for an item name, from Channel3. The API key never leaves the server."""
+    client: Channel3Client | None = request.app.state.market
+    if client is None:
+        raise HTTPException(503, "The price check is not set up on this server.")
+    redis = request.app.state.redis
+    if settings.rate_limits_enabled:
+        ip = request.client.host if request.client else "unknown"
+        key = f"{settings.rate_limit_prefix}:market:{ip}:{window(3600)}"
+        if not await within_limit(redis, key, settings.market_checks_per_hour_per_ip, 3600):
+            raise HTTPException(
+                429, "Too many price checks. Try again in a while.", headers={"Retry-After": "600"}
+            )
+    try:
+        result = await cached_search(client, redis, settings.rate_limit_prefix, q)
+    except MarketError as error:
+        raise HTTPException(502, str(error)) from error
+    return result.to_json()
+
+
+@app.get("/features")
+def features(request: Request) -> dict[str, object]:
+    """What this server can do, so the form only offers what will work."""
+    return {
+        "claude": bool(settings.anthropic_api_key) and settings.llm_matches_per_day != 0,
+        "market_price": bool(settings.channel3_api_key),
+        "payments": request.app.state.desk.gateway_name,
+    }
 
 
 @app.get("/health")
@@ -89,9 +180,10 @@ def health() -> dict[str, str]:
 @app.post("/negotiations", status_code=201)
 async def start_negotiation(body: StartNegotiation, request: Request) -> dict[str, str]:
     agent: Agent = RuleAgent()
+    if body.use_llm and not settings.anthropic_api_key:
+        raise HTTPException(503, "ANTHROPIC_API_KEY is not configured")
+    await _admit(request, body.use_llm)
     if body.use_llm:
-        if not settings.anthropic_api_key:
-            raise HTTPException(503, "ANTHROPIC_API_KEY is not configured")
         agent = LLMAgent(settings.anthropic_api_key, settings.llm_model)
     config = NegotiationConfig(
         item=body.item,
@@ -102,8 +194,8 @@ async def start_negotiation(body: StartNegotiation, request: Request) -> dict[st
         culture=CULTURES[body.culture],
         max_rounds=body.max_rounds,
     )
-    deal_id = await request.app.state.runner.start(config, agent, agent)
-    return {"deal_id": str(deal_id)}
+    deal_id = await request.app.state.runner.start(config, agent, agent, _market(body.market))
+    return {"deal_id": str(deal_id), "owner_token": await _issue_owner_token(request, deal_id)}
 
 
 class BidderBody(BaseModel):
@@ -121,6 +213,7 @@ class StartBiddingWar(BaseModel):
     culture: Literal["malaysian_chinese", "neutral"] = "malaysian_chinese"
     max_rounds: int = Field(default=6, ge=1, le=20)
     use_llm: bool = False
+    market: MarketSnapshot | None = None
 
     @model_validator(mode="after")
     def consistent(self) -> "StartBiddingWar":
@@ -147,17 +240,20 @@ async def start_bidding_war(body: StartBiddingWar, request: Request) -> dict[str
         culture=CULTURES[body.culture],
         max_rounds=body.max_rounds,
     )
+    if body.use_llm and not settings.anthropic_api_key:
+        raise HTTPException(503, "ANTHROPIC_API_KEY is not configured")
+    await _admit(request, body.use_llm)
     if body.use_llm:
-        if not settings.anthropic_api_key:
-            raise HTTPException(503, "ANTHROPIC_API_KEY is not configured")
         llm = LLMAgent(settings.anthropic_api_key, settings.llm_model)
         buyers: dict[str, Agent] = {b.id: llm for b in bidders}
         seller = llm
     else:
         styles = {f"b{i + 1}": b.style for i, b in enumerate(body.bidders) if b.style}
         buyers = rule_buyers(config, styles)
-    deal_id = await request.app.state.runner.start_bidding(config, buyers, seller)
-    return {"deal_id": str(deal_id)}
+    deal_id = await request.app.state.runner.start_bidding(
+        config, buyers, seller, _market(body.market)
+    )
+    return {"deal_id": str(deal_id), "owner_token": await _issue_owner_token(request, deal_id)}
 
 
 @app.get("/negotiations/{deal_id}/events")
@@ -187,6 +283,12 @@ class ShipBody(BaseModel):
 
 
 async def _shield(request: Request, deal_id: UUID, op: str, **kwargs: str) -> dict[str, object]:
+    log: EventLog = request.app.state.log
+    stored = await log.access_hash(deal_id)
+    if not token_matches(request.headers.get("x-deal-token"), stored):
+        if stored is None and not await log.read_after(deal_id):
+            raise HTTPException(404, "unknown deal")
+        raise HTTPException(403, "Only the person who started this match can move its money.")
     desk: DealDesk = request.app.state.desk
     try:
         return await desk.run(deal_id, op, **kwargs)

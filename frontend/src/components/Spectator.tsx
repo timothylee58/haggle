@@ -9,7 +9,7 @@ import { BiddingWar } from "@/components/BiddingWar";
 import { ShieldPanel } from "@/components/ShieldPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { currentRound, meterPosition, refereeCall, resultHeadline, type Match, type Side, type Turn } from "@/lib/negotiation";
+import { currentRound, marketLine, meterPosition, refereeCall, resultHeadline, type Match, type Side, type Turn } from "@/lib/negotiation";
 import { useMatch, type Connection } from "@/lib/useMatch";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -171,6 +171,7 @@ function Duel({ dealId, match, connection }: { dealId: string; match: Match; con
               {match.maxRounds > 0 && `Round ${currentRound(match)} of ${match.maxRounds} · `}{match.currency}
             </p>
           </div>
+          {marketLine(match) && <p className="mt-1 text-sm text-muted-foreground">{marketLine(match)}</p>}
           <div className="mt-4 grid grid-cols-2 gap-6 sm:gap-12">
             <Team side="buyer" price={last?.last_bid ?? null} face={last?.buyer_face ?? 70} label="Current bid" turn={last?.turn ?? 0} onMove={!match.ended && last?.side === "buyer"} delta={last && previous ? last.buyer_face - previous.buyer_face : 0} />
             <Team side="seller" price={last?.last_ask ?? match.openingAsk} face={last?.seller_face ?? 70} label="Current ask" turn={last?.turn ?? 0} onMove={!match.ended && last?.side === "seller"} delta={last && previous ? last.seller_face - previous.seller_face : (last ? last.seller_face - 70 : 0)} />

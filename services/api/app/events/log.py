@@ -41,6 +41,15 @@ class DealTermsRow(Base):
     budget_cap_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
+class DealAccessRow(Base):
+    """Private. Holds only a hash of the owner token, which is what authorises moving money."""
+
+    __tablename__ = "deal_access"
+
+    deal_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 @dataclass(frozen=True)
 class StoredEvent:
     deal_id: UUID
@@ -98,6 +107,15 @@ class EventLog:
     async def save_terms(self, deal_id: UUID, budget_cap_minor: int) -> None:
         async with self._sessions() as session, session.begin():
             session.add(DealTermsRow(deal_id=deal_id, budget_cap_minor=budget_cap_minor))
+
+    async def save_access(self, deal_id: UUID, token_hash: str) -> None:
+        async with self._sessions() as session, session.begin():
+            session.add(DealAccessRow(deal_id=deal_id, token_hash=token_hash))
+
+    async def access_hash(self, deal_id: UUID) -> str | None:
+        async with self._sessions() as session:
+            row = await session.get(DealAccessRow, deal_id)
+            return row.token_hash if row else None
 
     async def budget_cap(self, deal_id: UUID) -> int | None:
         async with self._sessions() as session:

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ownerToken } from "./ownerToken";
 import { API_URL } from "./useMatch";
 
 export type ShieldState = "negotiated" | "authorized" | "shipped" | "delivered" | "captured" | "refunded" | "voided";
@@ -51,7 +52,7 @@ export function useShield(dealId: string, enabled: boolean) {
     async (step: string, body?: object): Promise<ShieldView> => {
       const response = await fetch(`${API_URL}/deals/${dealId}/shield/${step}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-deal-token": ownerToken(dealId) ?? "" },
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await response.json();
@@ -64,5 +65,8 @@ export function useShield(dealId: string, enabled: boolean) {
     [dealId],
   );
 
-  return { view, log, act };
+  // Whoever started the match holds its owner token. Everyone else is watching.
+  const [canAct] = useState(() => ownerToken(dealId) !== null);
+
+  return { view, log, act, canAct };
 }

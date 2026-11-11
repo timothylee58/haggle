@@ -94,7 +94,7 @@ export function Tracker({ state, shipped }: { state: ShieldState; shipped: boole
 }
 
 export function ShieldPanel({ dealId }: { dealId: string }) {
-  const { view, log, act } = useShield(dealId, true);
+  const { view, log, act, canAct } = useShield(dealId, true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [approveUrl, setApproveUrl] = useState<string | null>(null);
@@ -170,7 +170,13 @@ export function ShieldPanel({ dealId }: { dealId: string }) {
             </Alert>
           )}
 
-          <div className="flex flex-wrap items-end gap-3">
+          {!canAct && (
+            <p className="max-w-prose text-muted-foreground">
+              You&apos;re watching. Only the person who started this match can move its money, from the browser they started it in.
+            </p>
+          )}
+
+          <div className={`flex flex-wrap items-end gap-3 ${canAct ? "" : "hidden"}`}>
             {state === "negotiated" && !approveUrl && (
               <Button size="lg" disabled={busy} onClick={approve} className="bg-referee text-referee-ink hover:bg-referee/85">
                 <Lock aria-hidden /> Approve hold

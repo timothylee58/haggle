@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import asdict
+from typing import Any
 from uuid import UUID, uuid4
 
 from app.events.stream import ENDED, EventBus
@@ -20,7 +21,13 @@ class NegotiationRunner:
         self._bus = bus
         self._tasks: set[asyncio.Task[None]] = set()
 
-    async def start(self, config: NegotiationConfig, buyer: Agent, seller: Agent) -> UUID:
+    async def start(
+        self,
+        config: NegotiationConfig,
+        buyer: Agent,
+        seller: Agent,
+        market: dict[str, Any] | None = None,
+    ) -> UUID:
         deal_id = uuid4()
         await self._bus.log.save_terms(deal_id, config.budget_cap * 100)
         # Spectators read this log, so the budget cap and floor must never enter it.
@@ -33,6 +40,7 @@ class NegotiationRunner:
                 "opening_ask": config.opening_ask,
                 "max_rounds": config.max_rounds,
                 "culture": config.culture.name,
+                **({"market": market} if market else {}),
             },
         )
         task = asyncio.create_task(self._run(deal_id, config, buyer, seller))
@@ -54,7 +62,11 @@ class NegotiationRunner:
         await self._bus.publish(deal_id, ENDED, {"status": status, "final_price": final_price})
 
     async def start_bidding(
-        self, config: BiddingConfig, buyers: Mapping[str, Agent], seller: Agent
+        self,
+        config: BiddingConfig,
+        buyers: Mapping[str, Agent],
+        seller: Agent,
+        market: dict[str, Any] | None = None,
     ) -> UUID:
         deal_id = uuid4()
         # No budget cap is saved yet: only the winner's cap matters, and it is saved when they win.
@@ -69,6 +81,7 @@ class NegotiationRunner:
                 "max_rounds": config.max_rounds,
                 "culture": config.culture.name,
                 "bidders": [{"id": b.id, "name": b.name} for b in config.bidders],
+                **({"market": market} if market else {}),
             },
         )
         task = asyncio.create_task(self._run_bidding(deal_id, config, buyers, seller))

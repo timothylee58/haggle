@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import {
   currentRound,
   leadingSeat,
+  marketLine,
   meterPosition,
   refereeCall,
   seatIndex,
@@ -204,6 +205,7 @@ export function BiddingWar({ dealId, match, connection }: { dealId: string; matc
             </p>
           </div>
 
+          {marketLine(match) && <p className="mt-1 text-sm text-muted-foreground">{marketLine(match)}</p>}
           <div className="mt-4 grid grid-cols-2 gap-6 sm:gap-12">
             <div>
               <p className="font-display text-xl font-bold uppercase text-seller sm:text-2xl">Seller asks</p>
