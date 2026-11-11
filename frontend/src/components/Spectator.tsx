@@ -1,9 +1,10 @@
 "use client";
 
-import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion, useSpring } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Gavel, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { RollingNumber } from "@/components/RollingNumber";
 import { ShieldPanel } from "@/components/ShieldPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,19 +15,6 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const money = (value: number | null) => (value === null ? "--" : value.toLocaleString("en-US"));
 const sideText: Record<Side, string> = { buyer: "text-buyer", seller: "text-seller" };
 const sideBar: Record<Side, string> = { buyer: "bg-buyer", seller: "bg-seller" };
-
-function RollingNumber({ value }: { value: number | null }) {
-  const reduced = useReducedMotion();
-  const spring = useSpring(value ?? 0, { stiffness: 90, damping: 20 });
-  const [shown, setShown] = useState(value ?? 0);
-  useMotionValueEvent(spring, "change", (latest) => setShown(Math.round(latest)));
-  useEffect(() => {
-    if (value === null) return;
-    if (reduced) spring.jump(value);
-    else spring.set(value);
-  }, [value, reduced, spring]);
-  return <>{value === null ? "--" : shown.toLocaleString("en-US")}</>;
-}
 
 function Face({ side, score, delta, turn }: { side: Side; score: number; delta: number; turn: number }) {
   const reduced = useReducedMotion();
@@ -156,7 +144,7 @@ export function Spectator({ dealId }: { dealId: string }) {
       <main className="mx-auto grid min-h-dvh max-w-xl content-center gap-4 px-4">
         <h1 className="font-display text-5xl font-bold uppercase">Match not found</h1>
         <p className="text-muted-foreground">This link has no match behind it, or the API isn&apos;t reachable.</p>
-        <Link href="/" className="underline underline-offset-4">Start a new match</Link>
+        <Link href="/play" className="underline underline-offset-4">Start a new match</Link>
       </main>
     );
   }
@@ -193,7 +181,7 @@ export function Spectator({ dealId }: { dealId: string }) {
                 <h2 className="font-display text-4xl font-bold uppercase leading-none sm:text-6xl">
                   {resultHeadline(match.ended.status, match.currency, match.ended.finalPrice)}
                 </h2>
-                <Button variant="link" className="h-auto p-0 text-inherit underline" nativeButton={false} render={<Link href="/" />}>Start another match</Button>
+                <Button variant="link" className="h-auto p-0 text-inherit underline" nativeButton={false} render={<Link href="/play" />}>Start another match</Button>
               </motion.section>
             )}
           </AnimatePresence>

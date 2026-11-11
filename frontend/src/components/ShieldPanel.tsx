@@ -31,7 +31,7 @@ const LOG_TEXT: Record<string, string> = {
   refund: "Buyer refunded",
 };
 
-function headline(view: ShieldView): string {
+export function headline(view: ShieldView): string {
   const money = `${view.currency} ${(view.amount_minor / 100).toLocaleString("en-US")}`;
   switch (view.state) {
     case "negotiated":
@@ -51,7 +51,7 @@ function headline(view: ShieldView): string {
   }
 }
 
-function Tracker({ state, shipped }: { state: ShieldState; shipped: boolean }) {
+export function Tracker({ state, shipped }: { state: ShieldState; shipped: boolean }) {
   const reduced = useReducedMotion();
   // A voided hold was authorized at least, and was shipped if a tracking number was recorded.
   const reached =

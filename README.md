@@ -59,6 +59,8 @@ uv run uvicorn app.main:app --reload
 cd frontend && pnpm install && pnpm dev
 ```
 
+The web app has three routes: `/` is the landing page, `/play` is the start form, and `/deals/{id}` is the live match and Shield panel. The landing page needs no API.
+
 `tests/test_tuning.py` plays 30 rule-agent scenarios and checks that the deals, closing gap and face scores stay in range.
 
 ## API

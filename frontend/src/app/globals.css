@@ -167,3 +167,15 @@ html { color-scheme: dark; scrollbar-color: var(--color-line-strong) var(--backg
 body { background: var(--background); color: var(--foreground); font-family: var(--font-body), sans-serif; }
 ::selection { background: var(--color-referee); color: var(--color-referee-ink); }
 input { caret-color: var(--color-referee); }
+
+/* Landing page: broadcast ticker and in-page anchor scrolling. Both stand still for reduced motion. */
+@keyframes ticker {
+  to { transform: translateX(-50%); }
+}
+.ticker-track { animation: ticker 45s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
