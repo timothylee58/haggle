@@ -106,3 +106,7 @@ Questions it answers:
 2. Does the sandbox merchant accept MYR and SGD, or must the demo fall back to USD?
 3. Is the buyer-approval redirect workable for a live demo? `FakeGateway` exists as an offline fallback.
 4. What is the real authorization window? Tune `Deadlines` in `shield/state_machine.py` to it.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
