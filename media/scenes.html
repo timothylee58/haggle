@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Haggle promo</title>
+<style>
+  :root { --blue:#0a84ff; --orange:#ff9f0a; --yellow:#ffd60a; --green:#30d158; --red:#ff453a; --gray:#8e8e93; --line:rgba(255,255,255,.12); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; background:#000; overflow:hidden; }
+  body { font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif; color:#f5f5f7; -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums; }
+  #stage { position:absolute; inset:0; overflow:hidden; background:#000; }
+  .abs { position:absolute; }
+  .glow { position:absolute; width:1000px; height:1000px; border-radius:50%; filter:blur(170px); }
+  #g1 { background:#0a84ff; } #g2 { background:#ff9f0a; }
+
+  /* headline layers */
+  .center { position:absolute; left:0; right:0; text-align:center; }
+  #hero h1 { font-size:250px; font-weight:700; letter-spacing:-0.05em; line-height:1; }
+  #hero p { font-size:64px; font-weight:500; letter-spacing:-0.02em; color:#a1a1a6; margin-top:10px; }
+  .cap { font-size:80px; font-weight:700; letter-spacing:-0.04em; line-height:1.05; white-space:nowrap; }
+  .blue { color:var(--blue); } .orange { color:var(--orange); } .green { color:var(--green); } .yellow { color:var(--yellow); }
+
+  /* window */
+  #wrap { position:absolute; left:210px; top:214px; width:1500px; height:820px; }
+  #win { position:absolute; inset:0; border-radius:28px; background:#1c1c1e; border:1px solid rgba(255,255,255,.1); box-shadow:0 70px 140px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.6); overflow:hidden; }
+  #bar { position:absolute; left:0; right:0; top:0; height:52px; background:#2a2a2c; border-bottom:1px solid rgba(255,255,255,.08); }
+  .dot { position:absolute; top:19px; width:15px; height:15px; border-radius:50%; }
+  #bar .t { position:absolute; left:0; right:0; top:0; line-height:52px; text-align:center; font-size:20px; font-weight:600; color:#a1a1a6; }
+  #content { position:absolute; left:0; right:0; top:52px; height:768px; }
+  .view { position:absolute; inset:0; }
+
+  /* form */
+  #formCard { position:absolute; left:375px; top:78px; width:750px; }
+  .lbl { font-size:21px; color:#a1a1a6; font-weight:500; margin-bottom:10px; }
+  .inp { height:64px; border-radius:15px; background:#2c2c2e; border:1px solid rgba(255,255,255,.08); padding:0 22px; font-size:29px; font-weight:500; line-height:62px; white-space:nowrap; }
+  .cols { display:flex; gap:30px; margin-top:34px; }
+  .col { width:360px; border-top:5px solid; padding-top:14px; }
+  .col h3 { font-size:30px; font-weight:700; letter-spacing:.02em; margin-bottom:14px; }
+  .col .f { margin-bottom:22px; }
+  #toggleRow { display:flex; align-items:center; gap:22px; margin-top:6px; font-size:27px; font-weight:500; }
+  #sw { width:68px; height:40px; border-radius:20px; position:relative; }
+  #knob { position:absolute; top:3px; width:34px; height:34px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.4); }
+  #btnStart { margin-top:34px; width:750px; height:74px; border-radius:19px; background:#ff453a; color:#fff; font-size:31px; font-weight:700; text-align:center; line-height:74px; letter-spacing:.01em; }
+
+  /* match */
+  .mhead { position:absolute; left:0; right:0; top:0; height:66px; border-bottom:1px solid var(--line); }
+  #live { position:absolute; left:40px; top:16px; height:36px; padding:0 16px 0 14px; border-radius:9px; font-size:23px; font-weight:700; line-height:36px; display:flex; align-items:center; gap:10px; }
+  #livedot { width:11px; height:11px; border-radius:50%; background:#fff; }
+  #mtitle { position:absolute; left:236px; top:0; line-height:66px; font-size:27px; font-weight:600; }
+  #mround { position:absolute; right:40px; top:0; line-height:66px; font-size:22px; color:#a1a1a6; }
+  .team { position:absolute; top:84px; width:600px; }
+  .team .nm { font-size:30px; font-weight:700; letter-spacing:.03em; }
+  .team .num { font-size:156px; font-weight:700; letter-spacing:-0.04em; line-height:1.02; margin-top:2px; }
+  .team .sub { font-size:23px; color:#a1a1a6; margin-top:-4px; }
+  .team .face { display:flex; justify-content:space-between; font-size:23px; color:#a1a1a6; margin-top:14px; }
+  .team .face b { color:#f5f5f7; font-weight:600; }
+  .bar { height:9px; border-radius:5px; background:rgba(255,255,255,.12); margin-top:8px; overflow:hidden; }
+  .bar i { display:block; height:100%; border-radius:5px; }
+  #buyer { left:60px; } #seller { right:60px; text-align:right; }
+  #gapRow { position:absolute; left:60px; right:60px; top:382px; height:120px; }
+  #gapRow .gh { display:flex; justify-content:space-between; align-items:baseline; }
+  #gapRow .gh span { font-size:28px; font-weight:700; letter-spacing:.03em; }
+  #gapRow .gh b { font-size:54px; font-weight:700; letter-spacing:-0.02em; }
+  #meter { position:relative; height:22px; border-radius:11px; background:rgba(255,255,255,.12); margin-top:8px; }
+  #mfill { position:absolute; top:0; bottom:0; border-radius:11px; background:rgba(255,255,255,.16); }
+  .mk { position:absolute; top:-7px; width:8px; height:36px; border-radius:4px; margin-left:-4px; }
+  .ml { display:flex; justify-content:space-between; font-size:22px; color:#a1a1a6; margin-top:14px; }
+  #deal { position:absolute; left:60px; right:60px; top:380px; height:116px; border-radius:22px; background:var(--yellow); color:#1a1500; font-size:84px; font-weight:700; letter-spacing:-0.035em; line-height:116px; padding-left:34px; }
+  #feed { position:absolute; left:0; right:0; top:516px; height:252px; overflow:hidden; -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 36px); }
+  .msg { position:absolute; width:760px; }
+  .msg.b { left:60px; } .msg.s { right:60px; text-align:right; }
+  .bub { display:inline-block; height:58px; border-radius:29px; padding:0 28px; font-size:27px; font-weight:500; line-height:58px; white-space:nowrap; }
+  .msg.b .bub { background:var(--blue); color:#fff; } .msg.s .bub { background:var(--orange); color:#1a1000; }
+  .chip { margin-top:4px; font-size:19px; font-weight:600; color:var(--yellow); }
+  .chip:before { content:""; display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--yellow); margin-right:9px; }
+
+  /* shield */
+  #sBanner { position:absolute; left:60px; right:60px; top:30px; height:84px; border-radius:20px; background:var(--yellow); color:#1a1500; font-size:56px; font-weight:700; letter-spacing:-0.03em; line-height:84px; padding-left:30px; }
+  #sTitle { position:absolute; left:60px; top:150px; display:flex; align-items:center; gap:18px; font-size:42px; font-weight:700; letter-spacing:.01em; }
+  .badge { border:1px solid rgba(255,255,255,.25); border-radius:9px; padding:3px 12px; font-size:21px; font-weight:600; color:#a1a1a6; }
+  #sHead { position:absolute; left:60px; top:214px; width:840px; font-size:34px; font-weight:500; line-height:1.25; }
+  #steps { position:absolute; left:60px; top:296px; width:840px; height:140px; }
+  #track { position:absolute; left:44px; top:41px; width:752px; height:7px; border-radius:4px; background:rgba(255,255,255,.14); }
+  #tfill { height:100%; border-radius:4px; background:var(--yellow); width:0; }
+  .st { position:absolute; top:0; width:88px; text-align:center; }
+  .st .c { width:88px; height:88px; border-radius:50%; border:3px solid rgba(255,255,255,.22); background:#1c1c1e; display:flex; align-items:center; justify-content:center; color:#a1a1a6; }
+  .st .c svg { width:38px; height:38px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .st span { display:block; margin-top:12px; font-size:23px; color:#a1a1a6; font-weight:500; }
+  #actRow { position:absolute; left:60px; top:548px; height:80px; width:900px; }
+  #act { position:absolute; left:0; top:0; width:500px; height:80px; border-radius:20px; background:var(--yellow); color:#1a1500; font-size:30px; font-weight:700; text-align:center; line-height:80px; }
+  #cancel { position:absolute; left:530px; top:0; width:360px; height:80px; border-radius:20px; border:2px solid rgba(255,255,255,.22); font-size:25px; font-weight:600; text-align:center; line-height:76px; color:#d1d1d6; }
+  #paid { position:absolute; left:0; top:0; width:500px; height:80px; border-radius:20px; background:rgba(48,209,88,.16); color:var(--green); font-size:30px; font-weight:700; text-align:center; line-height:80px; }
+  #trk { position:absolute; left:0; top:-78px; width:430px; height:64px; border-radius:15px; background:#2c2c2e; border:1px solid rgba(255,255,255,.08); font-size:25px; font-weight:500; line-height:62px; padding:0 20px; color:#d1d1d6; }
+  #trail { position:absolute; left:990px; top:150px; width:450px; }
+  #trail h4 { font-size:30px; font-weight:700; letter-spacing:.03em; margin-bottom:22px; }
+  #trail ul { list-style:none; border-left:2px solid rgba(255,255,255,.18); padding-left:26px; }
+  #trail li { font-size:26px; line-height:1.3; padding:10px 0; position:absolute; width:420px; }
+  #trail li small { display:block; font-size:20px; color:#a1a1a6; }
+
+  /* toasts, cursor */
+  .toast { position:absolute; left:1186px; top:896px; width:510px; border-radius:26px; padding:20px 26px; background:rgba(58,58,60,.72); -webkit-backdrop-filter:blur(40px) saturate(1.6); backdrop-filter:blur(40px) saturate(1.6); border:1px solid rgba(255,255,255,.14); box-shadow:0 30px 60px rgba(0,0,0,.45); }
+  .toast .a { font-size:20px; color:#a1a1a6; font-weight:600; letter-spacing:.04em; text-transform:uppercase; }
+  .toast .m { font-size:30px; font-weight:600; margin-top:4px; letter-spacing:-0.01em; }
+  #cursor { position:absolute; left:0; top:0; width:44px; height:52px; pointer-events:none; filter:drop-shadow(0 6px 8px rgba(0,0,0,.5)); transform-origin:6px 4px; }
+  #ripple { position:absolute; width:90px; height:90px; margin:-45px 0 0 -45px; border-radius:50%; border:4px solid rgba(255,255,255,.85); pointer-events:none; }
+
+  /* outro */
+  #o1, #o2 { font-size:170px; font-weight:700; letter-spacing:-0.05em; line-height:1.02; }
+  #brand h2 { font-size:110px; font-weight:700; letter-spacing:-0.045em; }
+  #pill { display:inline-block; margin-top:34px; height:92px; padding:0 52px; border-radius:46px; background:#fff; color:#000; font-size:38px; font-weight:600; line-height:92px; }
+  #fine { font-size:25px; color:#8e8e93; margin-top:34px; }
+  #fade { position:absolute; inset:0; background:#000; opacity:0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow" id="g1"></div><div class="glow" id="g2"></div>
+
+  <div id="hero" class="center" style="top:300px"><h1 id="h1">Haggle.</h1><p id="hsub">Two AI agents. One price.</p></div>
+
+  <div id="cap1" class="center cap" style="top:64px">Set the <span class="blue">stakes</span>.</div>
+  <div id="cap2" class="center cap" style="top:64px">Watch them <span class="orange">fight</span> over the bid.</div>
+  <div id="cap3" class="center cap" style="top:64px">Money moves only after <span class="green">delivery</span>.</div>
+
+  <div id="wrap">
+    <div id="win">
+      <div id="bar">
+        <div class="dot" style="left:22px;background:#ff5f57"></div><div class="dot" style="left:48px;background:#febc2e"></div><div class="dot" style="left:74px;background:#28c840"></div>
+        <div class="t">Haggle</div>
+      </div>
+      <div id="content">
+
+        <div class="view" id="formView">
+          <div id="formCard">
+            <div class="lbl">What's being sold</div>
+            <div class="inp" id="fItem"></div>
+            <div class="cols">
+              <div class="col" style="border-color:var(--blue)">
+                <h3 class="blue">BUYER</h3>
+                <div class="f"><div class="lbl">Budget cap</div><div class="inp" id="fBudget"></div></div>
+              </div>
+              <div class="col" style="border-color:var(--orange)">
+                <h3 class="orange">SELLER</h3>
+                <div class="f"><div class="lbl">Opening ask</div><div class="inp" id="fAsk"></div></div>
+                <div class="f"><div class="lbl">Lowest price</div><div class="inp" id="fFloor"></div></div>
+              </div>
+            </div>
+            <div id="toggleRow"><div id="sw"><div id="knob"></div></div><span>Let Claude play both sides</span></div>
+            <div id="btnStart">Start the match</div>
+          </div>
+        </div>
+
+        <div class="view" id="matchView">
+          <div class="mhead">
+            <div id="live"><span id="livedot"></span><span id="livetxt">LIVE</span></div>
+            <div id="mtitle">Vintage Yamaha guitar</div>
+            <div id="mround"></div>
+          </div>
+          <div class="team" id="buyer"><div class="nm blue">BUYER</div><div class="num" id="bnum"></div><div class="sub">Current bid</div>
+            <div class="face"><span>Face</span><b id="bfv"></b></div><div class="bar"><i id="bfb" style="background:var(--blue)"></i></div></div>
+          <div class="team" id="seller"><div class="nm orange">SELLER</div><div class="num" id="snum"></div><div class="sub">Current ask</div>
+            <div class="face"><span>Face</span><b id="sfv"></b></div><div class="bar"><i id="sfb" style="background:var(--orange);float:right"></i></div></div>
+          <div id="gapRow">
+            <div class="gh"><span>GAP</span><b id="gapnum"></b></div>
+            <div id="meter"><div id="mfill"></div><div class="mk" id="mkb" style="background:var(--blue)"></div><div class="mk" id="mks" style="background:var(--orange)"></div></div>
+            <div class="ml"><span>First bid 668</span><span>Opening ask 1,288</span></div>
+          </div>
+          <div id="deal">Deal at MYR 768</div>
+          <div id="feed"></div>
+        </div>
+
+        <div class="view" id="shieldView">
+          <div id="sBanner">Deal at MYR 768</div>
+          <div id="sTitle">KENA SCAM SHIELD <span class="badge">Sample</span></div>
+          <div id="sHead"></div>
+          <div id="steps"><div id="track"><div id="tfill"></div></div></div>
+          <div id="actRow">
+            <div id="trk">SAMPLE123MY</div>
+            <div id="act"></div>
+            <div id="cancel">Cancel and release hold</div>
+            <div id="paid">Paid to the seller</div>
+          </div>
+          <div id="trail"><h4>MONEY TRAIL</h4><ul id="trailList" style="height:330px;position:relative"></ul></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toastA" class="toast" style="opacity:0"><div class="a">Haggle</div><div class="m">Funds held. Seller not paid yet</div></div>
+  <div id="toastB" class="toast" style="opacity:0"><div class="a">Haggle</div><div class="m">MYR 768 paid to the seller</div></div>
+
+  <div id="o1" class="center" style="top:300px">Code decides.</div>
+  <div id="o2" class="center" style="top:480px"><span class="orange">The AI talks.</span></div>
+  <div id="brand" class="center" style="top:330px"><h2>Haggle.</h2><div id="pill">Start a match</div><div id="fine">Payments run on PayPal's sandbox. No real money moves.</div></div>
+
+  <div id="ripple" style="opacity:0"></div>
+  <svg id="cursor" viewBox="0 0 24 28" style="opacity:0"><path d="M3 2v20l5-5 3.5 8 3-1.3-3.5-7.7H20z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  <div id="fade"></div>
+</div>
+
+<script>
+const TL = window.TL;
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const eOut = (x) => 1 - Math.pow(1 - x, 3);
+const eOutExpo = (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x));
+const eInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const lerp = (a, b, x) => a + (b - a) * x;
+const fmt = (n) => Math.round(n).toLocaleString("en-US");
+
+const FIRST_BID = 668, OPEN_ASK = 1288;
+const TURNS = [
+  { side: "b", price: 668, bid: 668, ask: 1288, bf: 70, sf: 71, text: "Boss, my wallet is shy today. RM668, can?" },
+  { side: "s", price: 1008, bid: 668, ask: 1008, bf: 73, sf: 71, text: "Aiya, this guitar got history lah. RM1,008." },
+  { side: "b", price: 718, bid: 718, ask: 1008, bf: 73, sf: 74, text: "Okay, I come up a bit. RM718.", note: "Referee: MYR 719 became MYR 718" },
+  { side: "s", price: 888, bid: 718, ask: 888, bf: 76, sf: 74, text: "Double luck for you boss. RM888.", note: "Referee: MYR 878 became MYR 888" },
+  { side: "b", price: 738, bid: 738, ask: 888, bf: 76, sf: 77, text: "Almost there lah. RM738, shake hands?", note: "Referee: MYR 743 became MYR 738" },
+  { side: "s", price: 818, bid: 738, ask: 818, bf: 79, sf: 77, text: "I bend a little more. RM818.", note: "Referee: MYR 821 became MYR 818" },
+  { side: "b", price: 758, bid: 758, ask: 818, bf: 79, sf: 80, text: "One more step from me. RM758." },
+  { side: "s", price: 788, bid: 758, ask: 788, bf: 82, sf: 80, text: "So close already. RM788." },
+  { side: "b", price: 768, bid: 768, ask: 788, bf: 82, sf: 83, text: "Last stretch. RM768 and we are done." },
+  { side: "s", price: 768, bid: 768, ask: 788, bf: 82, sf: 83, text: "Okay lah, RM768. Deal." },
+];
+const turnT = (i) => TL.match_start + i * TL.turn_gap;
+const SLOT = 86;
+
+const ICONS = [
+  '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg>',
+  '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>',
+  '<svg viewBox="0 0 24 24"><path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
+  '<svg viewBox="0 0 24 24"><path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>',
+  '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h14"/><path d="M16 14.5h2"/></svg>',
+];
+const STEP_LABELS = ["Agreed", "Held", "Shipped", "Delivered", "Paid"];
+const stepEls = [];
+STEP_LABELS.forEach((label, i) => {
+  const d = document.createElement("div");
+  d.className = "st"; d.style.left = 0 + 188 * i + "px";
+  d.innerHTML = `<div class="c">${ICONS[i]}</div><span>${label}</span>`;
+  $("steps").appendChild(d); stepEls.push(d);
+});
+
+// message elements
+const msgEls = TURNS.map((tr) => {
+  const d = document.createElement("div");
+  d.className = "msg " + tr.side;
+  d.innerHTML = `<div class="bub">${tr.text}</div>` + (tr.note ? `<div class="chip">${tr.note}</div>` : "");
+  $("feed").appendChild(d);
+  return d;
+});
+const TRAIL = [
+  { t: TL.clicks[1], text: "Buyer approved the hold" },
+  { t: TL.state_times.held, text: "Funds held. Seller not paid yet" },
+  { t: TL.state_times.shipped, text: "Seller shipped with tracking", sub: "SAMPLE123MY" },
+  { t: TL.state_times.delivered, text: "Delivery confirmed" },
+  { t: TL.state_times.paid, text: "Funds released to the seller" },
+];
+const trailEls = TRAIL.map((e) => {
+  const li = document.createElement("li");
+  li.innerHTML = e.text + (e.sub ? `<small>${e.sub}</small>` : "");
+  $("trailList").appendChild(li);
+  return li;
+});
+
+// captions: [element, in, out]
+const CAPS = [["cap1", 5.5, 11.3], ["cap2", 11.3, 27.0], ["cap3", 27.0, 36.2]];
+// cursor path through window-relative targets, resolved after layout (see measure()).
+let PATH = [];
+let TARGETS = {};
+
+function stateAt(t) {
+  const s = TL.state_times;
+  if (t >= s.paid) return 4;
+  if (t >= s.delivered) return 3;
+  if (t >= s.shipped) return 2;
+  if (t >= s.held) return 1;
+  return 0;
+}
+
+function render(t) {
+  // background glow drift
+  $("g1").style.left = -330 + Math.sin(t * 0.35) * 60 + "px"; $("g1").style.top = -420 + Math.cos(t * 0.3) * 50 + "px"; $("g1").style.opacity = 0.34;
+  $("g2").style.left = 1250 + Math.cos(t * 0.33) * 60 + "px"; $("g2").style.top = 520 + Math.sin(t * 0.28) * 60 + "px"; $("g2").style.opacity = 0.3;
+
+  // intro
+  const hIn = eOutExpo(seg(t, TL.title[0], TL.title[0] + 1.3));
+  const hOut = eInOut(seg(t, TL.title[1] - 0.7, TL.title[1]));
+  $("h1").style.opacity = hIn * (1 - hOut);
+  $("h1").style.transform = `scale(${lerp(0.9, 1, hIn) * lerp(1, 1.06, hOut)})`;
+  $("h1").style.filter = `blur(${lerp(24, 0, hIn) + lerp(0, 10, hOut)}px)`;
+  const sIn = eOutExpo(seg(t, TL.title[0] + 1.1, TL.title[0] + 2.2));
+  $("hsub").style.opacity = sIn * (1 - hOut);
+  $("hsub").style.transform = `translateY(${lerp(30, 0, sIn)}px)`;
+  $("hero").style.display = t > TL.title[1] + 0.1 ? "none" : "block";
+
+  // captions
+  CAPS.forEach(([id, a, b]) => {
+    const i = eOutExpo(seg(t, a, a + 0.9)), o = eInOut(seg(t, b - 0.55, b));
+    const el = $(id);
+    el.style.opacity = i * (1 - o);
+    el.style.transform = `translateY(${lerp(34, 0, i) - lerp(0, 22, o)}px)`;
+    el.style.filter = `blur(${lerp(14, 0, i) + lerp(0, 8, o)}px)`;
+  });
+
+  // window entrance, slow push-in, exit
+  const wIn = eOutExpo(seg(t, TL.win_in, TL.win_in + 1.25));
+  const wOut = eInOut(seg(t, TL.outro_in, TL.outro_in + 0.9));
+  const push = lerp(1, 1.03, seg(t, TL.win_in + 1, 36));
+  const sc = lerp(0.9, 1, wIn) * push * lerp(1, 0.92, wOut);
+  $("wrap").style.opacity = wIn * (1 - wOut);
+  $("wrap").style.transform = `translateY(${lerp(110, 0, wIn) + lerp(0, 40, wOut)}px) scale(${sc})`;
+  $("wrap").style.display = (t < TL.win_in - 0.1 || t > TL.outro_in + 1) ? "none" : "block";
+
+  // form values
+  const typed = seg(t, TL.type[0], TL.type[1]);
+  const item = "Vintage Yamaha guitar";
+  $("fItem").textContent = item.slice(0, Math.floor(typed * item.length)) + (typed > 0 && typed < 1 ? "▏" : "");
+  const cnt = (a, b, p) => lerp(a, b, eOut(clamp(p)));
+  const c0 = seg(t, TL.count[0], TL.count[1]);
+  $("fBudget").textContent = fmt(cnt(0, 950, c0 * 1.0));
+  $("fAsk").textContent = fmt(cnt(0, 1288, clamp(c0 * 1.1 - 0.1)));
+  $("fFloor").textContent = fmt(cnt(0, 700, clamp(c0 * 1.2 - 0.2)));
+  const tg = eOut(seg(t, TL.toggle_on, TL.toggle_on + 0.35));
+  $("sw").style.background = `rgb(${Math.round(lerp(72, 52, tg))}, ${Math.round(lerp(72, 199, tg))}, ${Math.round(lerp(74, 89, tg))})`;
+  $("knob").style.left = lerp(3, 31, tg) + "px";
+  const press = (tc) => Math.max(0, 1 - Math.abs(t - tc - 0.07) / 0.14);
+  $("btnStart").style.transform = `scale(${1 - 0.035 * press(TL.clicks[0])})`;
+  $("btnStart").style.filter = `brightness(${1 - 0.15 * press(TL.clicks[0])})`;
+
+  // views
+  const toMatch = eInOut(seg(t, TL.clicks[0] + 0.35, TL.match_start + 0.25));
+  const toShield = eInOut(seg(t, TL.shield_in, TL.shield_in + 0.8));
+  $("formView").style.opacity = 1 - toMatch;
+  $("formView").style.transform = `scale(${lerp(1, 0.97, toMatch)})`;
+  $("matchView").style.opacity = toMatch * (1 - toShield);
+  $("matchView").style.transform = `scale(${lerp(1.03, 1, toMatch)})`;
+  $("shieldView").style.opacity = toShield;
+  $("shieldView").style.transform = `translateY(${lerp(30, 0, toShield)}px)`;
+
+  // scoreboard
+  let k = -1;
+  for (let i = 0; i < TURNS.length; i++) if (t >= turnT(i)) k = i;
+  const cur = k >= 0 ? TURNS[k] : { bid: 0, ask: OPEN_ASK, bf: 70, sf: 70 };
+  const prev = k > 0 ? TURNS[k - 1] : { bid: 0, ask: OPEN_ASK, bf: 70, sf: 70 };
+  const p = k >= 0 ? eOutExpo(seg(t, turnT(k), turnT(k) + 0.9)) : 1;
+  const bid = lerp(prev.bid, cur.bid, p), ask = lerp(prev.ask, cur.ask, p);
+  const bf = lerp(prev.bf, cur.bf, p), sf = lerp(prev.sf, cur.sf, p);
+  $("bnum").textContent = k >= 0 ? fmt(bid) : "--";
+  $("snum").textContent = fmt(ask);
+  $("bfv").textContent = fmt(bf); $("sfv").textContent = fmt(sf);
+  $("bfb").style.width = bf + "%"; $("sfb").style.width = sf + "%";
+  $("gapnum").textContent = k >= 0 ? fmt(ask - bid) : "--";
+  const pos = (v) => clamp((v - FIRST_BID) / (OPEN_ASK - FIRST_BID)) * 100;
+  const bp = k >= 0 ? pos(bid) : 0, ap = pos(ask);
+  $("mkb").style.left = bp + "%"; $("mks").style.left = ap + "%";
+  $("mfill").style.left = bp + "%"; $("mfill").style.width = Math.max(0, ap - bp) + "%";
+  $("mround").textContent = `Round ${Math.max(1, Math.ceil((k + 1) / 2))} of 6 · MYR · Sample match`;
+  const ended = t >= TL.deal;
+  $("live").style.background = ended ? "#48484a" : "#ff453a";
+  $("livedot").style.opacity = ended ? 0 : 0.55 + 0.45 * Math.sin(t * 6);
+  $("livedot").style.width = ended ? "0px" : "11px";
+  $("livetxt").textContent = ended ? "FULL TIME" : "LIVE";
+
+  // deal banner replaces the gap row
+  const dl = eOutExpo(seg(t, TL.deal, TL.deal + 0.85));
+  $("gapRow").style.opacity = 1 - clamp(dl * 2);
+  $("deal").style.opacity = dl;
+  $("deal").style.clipPath = `inset(0 ${(1 - dl) * 100}% 0 0 round 22px)`;
+  $("deal").style.transform = `translateY(${lerp(14, 0, dl)}px)`;
+
+  // chat feed
+  let j = -1;
+  for (let i = 0; i < TURNS.length; i++) if (t >= turnT(i)) j = i;
+  const f = j < 0 ? -1 : j - 1 + eOutExpo(seg(t, turnT(j), turnT(j) + 0.6));
+  msgEls.forEach((el, i) => {
+    const d = f - i; // 0 = newest settled position
+    const y = 2 * SLOT - d * SLOT - 16;
+    const vis = i <= j;
+    let op = 0;
+    if (vis) op = clamp(1 + d) * clamp(1.9 - d); // fade in as it arrives, fade out as it rises
+    el.style.opacity = op;
+    el.style.transform = `translateY(${y}px)`;
+  });
+  $("feed").style.opacity = 1 - toShield;
+
+  // shield
+  const st = stateAt(t);
+  const heads = ["MYR 768 agreed. No money has moved.", "MYR 768 on hold. The seller can't touch it yet.", "MYR 768 still on hold until delivery is confirmed.", "Delivery confirmed. Releasing the payment…", "MYR 768 paid to the seller."];
+  $("sHead").textContent = heads[st];
+  const prog = [0, 1, 2, 3, 4];
+  const stepProg = lerp(prog[Math.max(0, st - 1)], prog[st], st === 0 ? 1 : eOutExpo(seg(t, [0, TL.state_times.held, TL.state_times.shipped, TL.state_times.delivered, TL.state_times.paid][st], [0, TL.state_times.held, TL.state_times.shipped, TL.state_times.delivered, TL.state_times.paid][st] + 0.9)));
+  $("tfill").style.width = (stepProg / 4) * 100 + "%";
+  stepEls.forEach((el, i) => {
+    const arrive = i === 0 ? -1 : [0, TL.state_times.held, TL.state_times.shipped, TL.state_times.delivered, TL.state_times.paid][i];
+    const on = eOutExpo(seg(t, arrive, arrive + 0.6));
+    const c = el.querySelector(".c");
+    c.style.background = `rgba(255,214,10,${on})`; c.style.borderColor = on > 0.5 ? "#ffd60a" : "rgba(255,255,255,.22)";
+    c.style.color = on > 0.5 ? "#1a1500" : "#a1a1a6";
+    c.style.transform = `scale(${1 + 0.16 * Math.sin(Math.PI * seg(t, arrive, arrive + 0.5)) * (i === 0 ? 0 : 1)})`;
+    el.querySelector("span").style.color = on > 0.5 ? "#f5f5f7" : "#a1a1a6";
+  });
+  const labels = ["Approve hold", "Mark as shipped", "Confirm delivery and pay"];
+  const labelIdx = st >= 3 ? 2 : st;
+  $("act").textContent = labels[Math.min(labelIdx, 2)];
+  const paid = t >= TL.state_times.paid + 0.1;
+  const pa = eOutExpo(seg(t, TL.state_times.paid + 0.1, TL.state_times.paid + 0.7));
+  $("act").style.opacity = 1 - pa; $("paid").style.opacity = pa;
+  const clickScale = (tc) => 1 - 0.035 * Math.max(0, 1 - Math.abs(t - tc - 0.07) / 0.14);
+  $("act").style.transform = `scale(${TL.clicks.slice(1).reduce((a, tc) => a * clickScale(tc), 1)})`;
+  $("cancel").style.opacity = (st >= 1 && st < 3 ? 1 : 0) * eOut(seg(t, TL.state_times.held, TL.state_times.held + 0.5));
+  $("trk").style.opacity = st === 1 ? eOut(seg(t, TL.state_times.held + 0.2, TL.state_times.held + 0.7)) : 0;
+  trailEls.forEach((li, i) => {
+    const a = eOutExpo(seg(t, TRAIL[i].t, TRAIL[i].t + 0.6));
+    li.style.opacity = a;
+    li.style.transform = `translateY(${lerp(18, 0, a)}px)`;
+    // The tracking entry has a second line, so rows are not a fixed height.
+    li.style.top = [0, 64, 128, 222, 286][i] + "px";
+  });
+
+  // toasts
+  const toast = (id, t0) => {
+    const i = eOutExpo(seg(t, t0, t0 + 0.7)), o = eInOut(seg(t, t0 + 2.6, t0 + 3.2));
+    const el = $(id); el.style.opacity = i * (1 - o);
+    el.style.transform = `translateY(${lerp(90, 0, i) + lerp(0, 36, o)}px) scale(${lerp(0.94, 1, i)})`;
+  };
+  toast("toastA", TL.state_times.held + 0.05);
+  toast("toastB", TL.state_times.paid + 0.1);
+
+  // cursor + ripple
+  renderCursor(t);
+
+  // outro
+  const o1 = eOutExpo(seg(t, TL.outro_in + 0.8, TL.outro_in + 1.8)), o2 = eOutExpo(seg(t, TL.outro_in + 1.9, TL.outro_in + 2.9));
+  const oOut = eInOut(seg(t, TL.outro_in + 3.6, TL.outro_in + 4.3));
+  [["o1", o1], ["o2", o2]].forEach(([id, v]) => {
+    const el = $(id); el.style.opacity = v * (1 - oOut);
+    el.style.transform = `translateY(${lerp(40, 0, v) - lerp(0, 26, oOut)}px) scale(${lerp(0.96, 1, v)})`;
+    el.style.filter = `blur(${lerp(18, 0, v) + lerp(0, 10, oOut)}px)`;
+  });
+  const br = eOutExpo(seg(t, TL.outro_in + 4.0, TL.outro_in + 5.0));
+  $("brand").style.opacity = br; $("brand").style.transform = `translateY(${lerp(40, 0, br)}px) scale(${lerp(0.96, 1, br)})`;
+  $("brand").style.filter = `blur(${lerp(18, 0, br)}px)`;
+  $("fade").style.opacity = seg(t, TL.duration - 0.9, TL.duration);
+}
+
+function renderCursor(t) {
+  const cur = $("cursor"), rip = $("ripple");
+  if (!PATH.length) { cur.style.opacity = 0; rip.style.opacity = 0; return; }
+  let a = PATH[0], b = PATH[PATH.length - 1];
+  for (let i = 0; i < PATH.length - 1; i++) if (t >= PATH[i].t && t <= PATH[i + 1].t) { a = PATH[i]; b = PATH[i + 1]; break; }
+  const x = t <= PATH[0].t ? PATH[0].x : t >= PATH[PATH.length - 1].t ? PATH[PATH.length - 1].x : lerp(a.x, b.x, eInOut(seg(t, a.t, b.t)));
+  const y = t <= PATH[0].t ? PATH[0].y : t >= PATH[PATH.length - 1].t ? PATH[PATH.length - 1].y : lerp(a.y, b.y, eInOut(seg(t, a.t, b.t)));
+  // Visible while it presses Start, hidden during the fight, back for the Shield buttons.
+  const winA = eOut(seg(t, TL.cursor_in, TL.cursor_in + 0.4)) * (1 - eOut(seg(t, TL.match_start + 0.2, TL.match_start + 0.8)));
+  const winB = eOut(seg(t, TL.clicks[1] - 1.3, TL.clicks[1] - 0.8)) * (1 - eOut(seg(t, TL.clicks[3] + 0.9, TL.clicks[3] + 1.6)));
+  const show = Math.max(winA, winB);
+  const dip = TL.clicks.reduce((m, tc) => Math.max(m, Math.max(0, 1 - Math.abs(t - tc - 0.06) / 0.12)), 0);
+  cur.style.opacity = show;
+  cur.style.transform = `translate(${x - 6}px, ${y - 4}px) scale(${1 - 0.14 * dip})`;
+  let ro = 0, rs = 0, rx = x, ry = y;
+  for (const tc of TL.clicks) { const q = seg(t, tc, tc + 0.55); if (q > 0 && q < 1) { ro = 1 - q; rs = 0.4 + 1.1 * eOut(q); } }
+  rip.style.opacity = ro * 0.9; rip.style.left = rx + "px"; rip.style.top = ry + "px"; rip.style.transform = `scale(${rs})`;
+}
+
+function center(el) {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+function measure() {
+  PATH = [];
+  render(TL.clicks[0] - 0.01); const start = center($("btnStart"));
+  render(TL.clicks[1] - 0.01); const act = center($("act"));
+  render(TL.cursor_in);
+  PATH = [
+    { t: TL.cursor_in, x: start.x + 520, y: start.y + 260 },
+    { t: TL.clicks[0], x: start.x, y: start.y },
+    { t: TL.match_start + 0.7, x: start.x + 260, y: start.y + 140 },
+    { t: TL.clicks[1] - 1.3, x: act.x + 620, y: act.y - 120 },
+    { t: TL.clicks[1], x: act.x, y: act.y },
+    { t: TL.clicks[2], x: act.x + 2, y: act.y + 1 },
+    { t: TL.clicks[3], x: act.x, y: act.y },
+    { t: TL.clicks[3] + 1.6, x: act.x + 420, y: act.y + 130 },
+  ];
+}
+window.initScenes = () => { PATH = []; measure(); render(0); window.__ready = true; };
+window.render = render;
+</script>
+</body>
+</html>

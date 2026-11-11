@@ -1,0 +1,38 @@
+{
+  "duration": 42.6667,
+  "bpm": 120,
+  "fps": 30,
+  "title": [
+    0.3,
+    4.9
+  ],
+  "win_in": 5.2,
+  "type": [
+    6.4,
+    7.6
+  ],
+  "count": [
+    7.6,
+    9.4
+  ],
+  "toggle_on": 9.2,
+  "cursor_in": 9.3,
+  "click_start": 10.9,
+  "match_start": 11.5,
+  "turn_gap": 1.55,
+  "deal": 26.0,
+  "shield_in": 27.2,
+  "clicks": [
+    10.9,
+    29.2,
+    31.0,
+    32.8
+  ],
+  "state_times": {
+    "held": 29.45,
+    "shipped": 31.25,
+    "delivered": 33.05,
+    "paid": 33.6
+  },
+  "outro_in": 36.6
+}

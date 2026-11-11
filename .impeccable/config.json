@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "skipped-heading",
+        "value": "*",
+        "files": [
+          "media/scenes.html"
+        ],
+        "createdAt": "2026-11-11T10:40:17.601Z",
+        "reason": "assistant decision: scenes.html is the render source for an MP4 and is never read as a document; heading order has no accessibility effect"
+      }
+    ]
+  }
+}
