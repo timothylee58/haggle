@@ -196,3 +196,93 @@ async def test_api_flow_and_public_stream_hides_private_data(client: httpx.Async
 async def test_api_rejects_unknown_deal(client: httpx.AsyncClient) -> None:
     assert (await client.post(f"/deals/{uuid4()}/shield/approve")).status_code == 404
     assert (await client.get(f"/deals/{uuid4()}/shield/events")).status_code == 404
+
+
+WAR = {
+    "item": "Guitar",
+    "seller_floor": 703,
+    "opening_ask": 1288,
+    "bidders": [
+        {"name": "Aiman", "budget_cap": 951},
+        {"name": "Mei Ling", "budget_cap": 1004},
+        {"name": "Ravi", "budget_cap": 887},
+    ],
+}
+
+
+async def _run_war(
+    client: httpx.AsyncClient, body: dict[str, object] = WAR
+) -> tuple[str, list[dict[str, str]]]:
+    deal = (await client.post("/bidding-wars", json=body)).json()["deal_id"]
+    response = await client.get(f"/negotiations/{deal}/events")  # waits for the war to end
+    return deal, parse_sse(response.text)
+
+
+async def test_api_bidding_war_streams_every_move_without_private_limits(
+    client: httpx.AsyncClient,
+) -> None:
+    _, frames = await _run_war(client)
+    kinds = [f["event"] for f in frames]
+    assert kinds[0] == "negotiation_started" and kinds[-1] == ENDED and kinds.count("turn") > 10
+    started = json.loads(frames[0]["data"])
+    assert started["mode"] == "bidding_war"
+    assert [b["name"] for b in started["bidders"]] == ["Aiman", "Mei Ling", "Ravi"]
+    turns = [json.loads(f["data"]) for f in frames if f["event"] == "turn"]
+    assert all({"bidder", "bidders", "round"} <= set(t) for t in turns)
+    assert all(
+        set(b) == {"id", "name", "bid", "face", "patience", "state"}
+        for t in turns
+        for b in t["bidders"]
+    )
+    # A bid that reaches a buyer's cap is public by nature, so the limits themselves are checked
+    # structurally: no budget field anywhere, and no cap in what is sent before and after the bidding.
+    assert "budget" not in "".join(f["data"] for f in frames)
+    around = frames[0]["data"] + frames[-1]["data"]
+    assert "951" not in around and "1004" not in around and "887" not in around
+    ended = json.loads(frames[-1]["data"])
+    assert ended["status"] == "deal" and ended["winner"]["name"] in {"Aiman", "Mei Ling", "Ravi"}
+
+
+async def test_api_bidding_war_winner_uses_their_own_cap_in_the_shield(
+    client: httpx.AsyncClient,
+) -> None:
+    from uuid import UUID
+
+    deal, frames = await _run_war(client)
+    ended = json.loads(frames[-1]["data"])
+    cap = {"Aiman": 951, "Mei Ling": 1004, "Ravi": 887}[ended["winner"]["name"]]
+    assert await app.state.log.budget_cap(UUID(deal)) == cap * 100
+    base = f"/deals/{deal}/shield"
+    assert (await client.post(f"{base}/approve")).status_code == 200
+    assert (await client.post(f"{base}/authorize")).status_code == 200
+    state = (await client.get(base)).json()
+    assert state["state"] == "authorized" and state["amount_minor"] == ended["final_price"] * 100
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"bidders": [{"name": "Solo", "budget_cap": 900}]},
+        {"bidders": [{"name": f"B{i}", "budget_cap": 900} for i in range(5)]},
+        {"bidders": [{"name": "Sam", "budget_cap": 900}, {"name": "sam", "budget_cap": 800}]},
+        {"opening_ask": 100},
+        {"bidders": [{"name": "A", "budget_cap": 0}, {"name": "B", "budget_cap": 900}]},
+        {
+            "bidders": [
+                {"name": "A", "budget_cap": 900, "style": "reckless"},
+                {"name": "B", "budget_cap": 900},
+            ]
+        },
+    ],
+)
+async def test_api_bidding_war_rejects_bad_requests(
+    client: httpx.AsyncClient, change: dict[str, object]
+) -> None:
+    assert (await client.post("/bidding-wars", json={**WAR, **change})).status_code == 422
+
+
+async def test_api_bidding_war_llm_needs_a_key(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    assert (await client.post("/bidding-wars", json={**WAR, "use_llm": True})).status_code == 503

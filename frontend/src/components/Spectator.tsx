@@ -5,6 +5,7 @@ import { Gavel, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { RollingNumber } from "@/components/RollingNumber";
+import { BiddingWar } from "@/components/BiddingWar";
 import { ShieldPanel } from "@/components/ShieldPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -128,6 +129,11 @@ function status(connection: Connection, ended: boolean): string {
 
 export function Spectator({ dealId }: { dealId: string }) {
   const { match, connection } = useMatch(dealId);
+  if (match.mode === "bidding_war") return <BiddingWar dealId={dealId} match={match} connection={connection} />;
+  return <Duel dealId={dealId} match={match} connection={connection} />;
+}
+
+function Duel({ dealId, match, connection }: { dealId: string; match: Match; connection: Connection }) {
   const last = match.turns.at(-1);
   const feedEnd = useRef<HTMLLIElement>(null);
   const reduced = useReducedMotion();

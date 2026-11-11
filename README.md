@@ -37,10 +37,11 @@ Funds are authorized, never captured, until delivery is confirmed. A missed ship
 |---|---|
 | engine: lucky numbers, face, policy | done, tested |
 | shield: state machine, service, gateways | done, tested against a fake gateway and a mocked PayPal |
-| PayPal sandbox behaviour | **unverified, run the spike** |
+| PayPal sandbox behaviour | verified on 2026-11-09: authorize, capture, void, refund and tracking (see docs/risks.md) |
 | Event log and SSE API | done, tested against real Postgres and Redis |
 | Finished deals connected to Shield, saved to the log, with a deadline sweep | done, tested against the fake gateway |
 | LangGraph negotiation loop | done, tested with rule and scripted agents; real LLM **unverified** |
+| Bidding war: one seller, two to four buyers | done, tested with rule agents; real LLM **unverified** |
 | Spectator UI | done, checked in the browser with rule agents |
 
 ## Run
@@ -66,6 +67,7 @@ The web app has three routes: `/` is the landing page, `/play` is the start form
 ## API
 
 - `POST /negotiations` with `item`, `budget_cap`, `seller_floor`, `opening_ask` starts a negotiation and returns `deal_id`. Add `"use_llm": true` for Claude.
+- `POST /bidding-wars` starts one seller against two to four buyers: `item`, `seller_floor`, `opening_ask`, and `bidders` (each with `name`, a private `budget_cap`, and an optional `style`: `balanced`, `aggressive`, `patient` or `lowballer`). It returns a `deal_id` and streams on the same events endpoint, so the Shield works unchanged for the winner.
 - `GET /negotiations/{deal_id}/events` streams SSE events: `negotiation_started`, `turn`, `negotiation_ended`. Reconnects resume through `Last-Event-ID`.
 
 - `/deals/{deal_id}/shield` reads the Shield state. POST to `/approve`, `/authorize`, `/ship`, `/deliver`, `/capture`, `/cancel` or `/refund` under it to act. **These routes have no login yet.**

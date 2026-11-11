@@ -161,6 +161,11 @@
   --color-line: oklch(0.3 0.03 265);
   --color-line-strong: oklch(0.42 0.03 265);
   --color-field: oklch(0.22 0.03 265);
+  /* Four buyers in a bidding war. The first is the same blue as a lone buyer. */
+  --color-bidder-1: oklch(0.8 0.14 225);
+  --color-bidder-2: oklch(0.82 0.16 155);
+  --color-bidder-3: oklch(0.76 0.15 300);
+  --color-bidder-4: oklch(0.8 0.15 350);
 }
 
 html { color-scheme: dark; scrollbar-color: var(--color-line-strong) var(--background); }

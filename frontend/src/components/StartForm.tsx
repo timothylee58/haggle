@@ -56,8 +56,33 @@ function explain(detail: unknown): string {
 }
 
 /** Catches the mistake we can see before any request is sent. */
+function post(path: string, body: unknown): Promise<Response> {
+  return fetch(`${API_URL}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+}
+
 function checkPrices(floor: number, ask: number): string | null {
   return ask < floor ? "The opening ask can't be below the lowest price." : null;
+}
+
+const DEFAULT_BUYERS = [
+  { name: "Aiman", cap: 950 },
+  { name: "Mei Ling", cap: 900 },
+  { name: "Ravi", cap: 1000 },
+  { name: "Siti", cap: 880 },
+];
+const CHIP = ["bg-bidder-1", "bg-bidder-2", "bg-bidder-3", "bg-bidder-4"];
+
+function BuyerRow({ index }: { index: number }) {
+  const buyer = DEFAULT_BUYERS[index];
+  return (
+    <div className="grid grid-cols-[1fr_7.5rem] items-center gap-2">
+      <div className="relative">
+        <span aria-hidden className={`absolute left-3 top-1/2 size-3 -translate-y-1/2 rounded-sm ${CHIP[index]}`} />
+        <Input aria-label={`Buyer ${index + 1} name`} className={`${inputClass} pl-9`} name={`buyer_name_${index}`} required maxLength={30} defaultValue={buyer.name} />
+      </div>
+      <Input aria-label={`${buyer.name}'s budget cap`} className={inputClass} name={`buyer_cap_${index}`} type="number" min={1} max={10000000} step={1} required defaultValue={buyer.cap} inputMode="numeric" />
+    </div>
+  );
 }
 
 export function StartForm() {
@@ -66,11 +91,15 @@ export function StartForm() {
   const [error, setError] = useState<string | null>(null);
   const [culture, setCulture] = useState("malaysian_chinese");
   const [useLlm, setUseLlm] = useState(false);
+  const [buyers, setBuyers] = useState(1);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const problem = checkPrices(Number(data.get("seller_floor")), Number(data.get("opening_ask")));
+    const names = Array.from({ length: buyers }, (_, i) => String(data.get(`buyer_name_${i}`) ?? "").trim().toLowerCase());
+    const problem =
+      checkPrices(Number(data.get("seller_floor")), Number(data.get("opening_ask"))) ??
+      (buyers > 1 && new Set(names).size !== names.length ? "Give each buyer a different name." : null);
     if (problem) {
       setError(problem);
       return;
@@ -78,19 +107,24 @@ export function StartForm() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/negotiations`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          item: data.get("item"),
-          budget_cap: Number(data.get("budget_cap")),
-          seller_floor: Number(data.get("seller_floor")),
-          opening_ask: Number(data.get("opening_ask")),
-          culture,
-          max_rounds: Number(data.get("max_rounds")),
-          use_llm: useLlm,
-        }),
-      });
+      const shared = {
+        item: data.get("item"),
+        seller_floor: Number(data.get("seller_floor")),
+        opening_ask: Number(data.get("opening_ask")),
+        culture,
+        max_rounds: Number(data.get("max_rounds")),
+        use_llm: useLlm,
+      };
+      const response =
+        buyers === 1
+          ? await post("/negotiations", { ...shared, budget_cap: Number(data.get("budget_cap")) })
+          : await post("/bidding-wars", {
+              ...shared,
+              bidders: Array.from({ length: buyers }, (_, i) => ({
+                name: String(data.get(`buyer_name_${i}`) ?? "").trim(),
+                budget_cap: Number(data.get(`buyer_cap_${i}`)),
+              })),
+            });
       const body = await response.json();
       if (!response.ok) throw new Error(explain(body.detail));
       router.push(`/deals/${body.deal_id}`);
@@ -110,9 +144,39 @@ export function StartForm() {
 
       <div className="grid gap-8 sm:grid-cols-2">
         <fieldset className="grid content-start gap-4 border-t-4 border-buyer pt-4">
-          <legend className="sr-only">Buyer</legend>
-          <p aria-hidden className="font-display text-2xl font-bold uppercase text-buyer">Buyer</p>
-          <Field label="Budget cap" name="budget_cap" defaultValue={950} hint="Enforced in code. Hidden from spectators." />
+          <legend className="sr-only">{buyers > 1 ? "Buyers" : "Buyer"}</legend>
+          <div className="flex items-center justify-between gap-3">
+            <p aria-hidden className="font-display text-2xl font-bold uppercase text-buyer">{buyers > 1 ? "Buyers" : "Buyer"}</p>
+            <div role="radiogroup" aria-label="Number of buyers" className="flex gap-1">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={buyers === n}
+                  aria-label={`${n} ${n === 1 ? "buyer" : "buyers"}`}
+                  onClick={() => setBuyers(n)}
+                  className={`size-9 rounded-sm border font-display text-xl font-bold outline-offset-2 transition-colors focus-visible:outline-2 focus-visible:outline-referee ${
+                    buyers === n ? "border-referee bg-referee text-referee-ink" : "border-line-strong text-muted-foreground hover:bg-accent hover:text-foreground"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+          {buyers === 1 ? (
+            <Field label="Budget cap" name="budget_cap" defaultValue={950} hint="Enforced in code. Hidden from spectators." />
+          ) : (
+            <>
+              <div className="grid gap-3">
+                {Array.from({ length: buyers }, (_, i) => (
+                  <BuyerRow key={i} index={i} />
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground">Name, then budget cap. Each buyer bids in turn, and the seller holds out longer when rivals are bidding. Budgets are enforced in code and hidden from spectators.</p>
+            </>
+          )}
         </fieldset>
         <fieldset className="grid content-start gap-4 border-t-4 border-seller pt-4">
           <legend className="sr-only">Seller</legend>
@@ -157,7 +221,7 @@ export function StartForm() {
       <motion.div whileHover={busy ? undefined : { scale: 1.01 }} whileTap={busy ? undefined : { scale: 0.98 }}>
         <Button type="submit" disabled={busy} className="h-14 w-full rounded-md bg-live font-display text-2xl font-bold uppercase text-white hover:bg-live/85">
           {busy && <Loader2 aria-hidden className="animate-spin" />}
-          {busy ? "Starting" : "Start the match"}
+          {busy ? "Starting" : buyers > 1 ? "Start the bidding war" : "Start the match"}
         </Button>
       </motion.div>
     </form>

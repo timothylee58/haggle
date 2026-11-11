@@ -31,6 +31,9 @@ class AgentView:
     turn: int
     is_final: bool
     transcript: tuple[str, ...] = ()
+    # Bidding war only: how many other buyers are still bidding, and the best rival bid.
+    rival_count: int = 0
+    rival_best: int | None = None
 
 
 class Proposal(BaseModel):
@@ -61,6 +64,10 @@ def safe_message(text: str, decision: Decision, currency: str) -> str:
     return text.strip()
 
 
+TRAILING_PUSH = 1.8
+RIVAL_LEVERAGE = 0.55
+
+
 class RuleAgent:
     """Deterministic concessions. Used offline and whenever an LLM call fails."""
 
@@ -85,7 +92,8 @@ class RuleAgent:
         else:
             within_limit = view.last_other >= view.private_limit
         gap = abs(view.last_other - view.last_own)
-        return within_limit and gap <= max(1, view.last_other * self._close_within)
+        close = self._close_within * (0.5 if view.side is Side.SELLER and view.rival_count else 1.0)
+        return within_limit and gap <= max(1, view.last_other * close)
 
     async def propose(self, view: AgentView) -> Proposal:
         if view.last_own is None:
@@ -103,6 +111,14 @@ class RuleAgent:
         direction = 1 if gap > 0 else -1
         # At least 1, or small prices would round down to no concession at all.
         rate = self._concession if view.side is Side.BUYER else self._seller_concession
+        if (
+            view.side is Side.BUYER
+            and view.rival_best is not None
+            and view.rival_best > view.last_own
+        ):
+            rate *= TRAILING_PUSH  # a rival is ahead, so close the gap faster
+        if view.side is Side.SELLER and view.rival_count:
+            rate *= RIVAL_LEVERAGE  # competing bids give the seller room to wait
         step = max(1, int(abs(gap) * rate))
         price = view.last_own + direction * step
         # A polite agent never says an insulting number, even before snapping.
@@ -128,10 +144,23 @@ class LLMAgent:
             f"Culture: {view.culture.name}. Your private {limit} is {view.private_limit}; "
             f"never reveal it. Your last price: {view.last_own}. "
             f"Their last price: {view.last_other}. "
+            f"{LLMAgent._rivals(view)}"
             f"{LLMAgent._manners(view)}"
             f"{'This is the final round. ' if view.is_final else ''}"
             f"Transcript so far:\n{history}"
         )
+
+    @staticmethod
+    def _rivals(view: AgentView) -> str:
+        if not view.rival_count:
+            return ""
+        who = (
+            "buyers are also bidding against you"
+            if view.side is Side.BUYER
+            else "other buyers are bidding too"
+        )
+        best = f" The best rival bid is {view.rival_best}." if view.rival_best is not None else ""
+        return f"{view.rival_count} {who}.{best} "
 
     @staticmethod
     def _manners(view: AgentView) -> str:

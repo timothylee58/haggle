@@ -19,6 +19,7 @@ from app.events.log import EventLog
 from app.events.runner import NegotiationRunner
 from app.events.stream import EventBus
 from app.negotiation.agents import Agent, LLMAgent, RuleAgent
+from app.negotiation.bidding import Bidder, BiddingConfig, rule_buyers
 from app.negotiation.graph import NegotiationConfig
 from app.shield.desk import SHIELD_EVENT, DealDesk, DeskError, public_view, shield_stream_done
 from app.shield.gateway import FakeGateway, PaymentGateway, PayPalGateway
@@ -102,6 +103,60 @@ async def start_negotiation(body: StartNegotiation, request: Request) -> dict[st
         max_rounds=body.max_rounds,
     )
     deal_id = await request.app.state.runner.start(config, agent, agent)
+    return {"deal_id": str(deal_id)}
+
+
+class BidderBody(BaseModel):
+    name: str = Field(min_length=1, max_length=30)
+    budget_cap: int = Field(gt=0, le=MAX_PRICE)
+    style: Literal["balanced", "aggressive", "patient", "lowballer"] | None = None
+
+
+class StartBiddingWar(BaseModel):
+    item: str = Field(min_length=1, max_length=200)
+    seller_floor: int = Field(gt=0, le=MAX_PRICE)
+    opening_ask: int = Field(gt=0, le=MAX_PRICE)
+    bidders: list[BidderBody] = Field(min_length=2, max_length=4)
+    currency: str = Field(default="MYR", pattern="^[A-Z]{3}$")
+    culture: Literal["malaysian_chinese", "neutral"] = "malaysian_chinese"
+    max_rounds: int = Field(default=6, ge=1, le=20)
+    use_llm: bool = False
+
+    @model_validator(mode="after")
+    def consistent(self) -> "StartBiddingWar":
+        if self.opening_ask < self.seller_floor:
+            raise ValueError("opening_ask cannot be below seller_floor")
+        names = [b.name.strip().lower() for b in self.bidders]
+        if len(set(names)) != len(names):
+            raise ValueError("bidder names must be different")
+        return self
+
+
+@app.post("/bidding-wars", status_code=201)
+async def start_bidding_war(body: StartBiddingWar, request: Request) -> dict[str, str]:
+    seller: Agent = RuleAgent()
+    bidders = tuple(
+        Bidder(f"b{i + 1}", b.name.strip(), b.budget_cap) for i, b in enumerate(body.bidders)
+    )
+    config = BiddingConfig(
+        item=body.item,
+        seller_floor=body.seller_floor,
+        opening_ask=body.opening_ask,
+        bidders=bidders,
+        currency=body.currency,
+        culture=CULTURES[body.culture],
+        max_rounds=body.max_rounds,
+    )
+    if body.use_llm:
+        if not settings.anthropic_api_key:
+            raise HTTPException(503, "ANTHROPIC_API_KEY is not configured")
+        llm = LLMAgent(settings.anthropic_api_key, settings.llm_model)
+        buyers: dict[str, Agent] = {b.id: llm for b in bidders}
+        seller = llm
+    else:
+        styles = {f"b{i + 1}": b.style for i, b in enumerate(body.bidders) if b.style}
+        buyers = rule_buyers(config, styles)
+    deal_id = await request.app.state.runner.start_bidding(config, buyers, seller)
     return {"deal_id": str(deal_id)}
 
 

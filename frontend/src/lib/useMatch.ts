@@ -5,6 +5,7 @@ import { applyEvent, emptyMatch, type Match, type MatchEvent } from "./negotiati
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const PACE_MS = 1400;
+const WAR_PACE_MS = 1000; // a bidding war has about three times the moves
 const WATCHED_KEY = "haggle:watched:";
 
 // Remembers matches this browser has watched to the end, so coming back (for example from
@@ -63,7 +64,8 @@ export function useMatch(dealId: string): { match: Match; connection: Connection
         if (batch.some((event) => event.type === "negotiation_ended")) markWatched(dealId);
       }
       // The opening event carries no action, so the first turn follows straight away.
-      const wait = instant ? 100 : batch[0]?.type === "negotiation_started" ? 200 : PACE_MS;
+      const isWarTurn = batch[0]?.type === "turn" && Boolean(batch[0].data.bidders);
+      const wait = instant ? 100 : batch[0]?.type === "negotiation_started" ? 200 : isWarTurn ? WAR_PACE_MS : PACE_MS;
       timer = setTimeout(release, wait);
     };
     let timer = setTimeout(release, 100);
