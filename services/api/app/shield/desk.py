@@ -108,10 +108,12 @@ class DealDesk:
 
     async def view(self, deal_id: UUID) -> dict[str, Any]:
         deal, approved = await self._load(deal_id)
+        latest = await self._bus.log.latest(deal_id, SHIELD_EVENT)
         payload = {
             "deal": _to_payload(deal),
             "approved": approved,
-            "step": "negotiated",
+            # The last step actually taken, not a fixed value.
+            "step": latest.payload["step"] if latest is not None else "negotiated",
             "gateway": self.gateway_name,
         }
         return public_view(payload)
@@ -130,8 +132,10 @@ class DealDesk:
 
     async def _run_locked(self, deal_id: UUID, op: str, **kwargs: str) -> dict[str, Any]:
         deal, approved = await self._load(deal_id)
+        before = (deal, approved)
         service = self._service
         approve_url: str | None = None
+        repeated = False
 
         if op == "approve":
             guard = await self._guard(deal_id, True)
@@ -139,6 +143,9 @@ class DealDesk:
             back = f"{settings.frontend_url}/deals/{deal_id}"
             deal, approve_url = await service.create_order(deal, guard, back)
             approved = True
+            # The order key is fixed, so asking again returns the same order and link.
+            # Nothing changed, so there is nothing new to log.
+            repeated = (deal, approved) == before
         elif op == "authorize":
             deal = await service.authorize(deal)
         elif op == "ship":
@@ -160,7 +167,8 @@ class DealDesk:
         else:
             raise DeskError(404, "unknown step")
 
-        await self._save(deal_id, deal, approved, op)
+        if not repeated:
+            await self._save(deal_id, deal, approved, op)
         result = public_view(
             {
                 "deal": _to_payload(deal),

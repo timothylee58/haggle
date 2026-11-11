@@ -5,6 +5,25 @@ import { applyEvent, emptyMatch, type Match, type MatchEvent } from "./negotiati
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const PACE_MS = 1400;
+const WATCHED_KEY = "haggle:watched:";
+
+// Remembers matches this browser has watched to the end, so coming back (for example from
+// PayPal) shows the result at once instead of replaying it. Storage can be blocked.
+function wasWatched(dealId: string): boolean {
+  try {
+    return localStorage.getItem(WATCHED_KEY + dealId) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markWatched(dealId: string): void {
+  try {
+    localStorage.setItem(WATCHED_KEY + dealId, "1");
+  } catch {
+    // Without storage the next visit simply replays the match.
+  }
+}
 
 export type Connection = "connecting" | "live" | "reconnecting" | "missing";
 
@@ -36,11 +55,16 @@ export function useMatch(dealId: string): { match: Match; connection: Connection
       }
     };
 
+    const instant = wasWatched(dealId);
     const release = () => {
-      const next = queue.current.shift();
-      if (next) setMatch((current) => applyEvent(current, next));
+      const batch = instant ? queue.current.splice(0) : queue.current.splice(0, 1);
+      if (batch.length > 0) {
+        setMatch((current) => batch.reduce((state, event) => applyEvent(state, event), current));
+        if (batch.some((event) => event.type === "negotiation_ended")) markWatched(dealId);
+      }
       // The opening event carries no action, so the first turn follows straight away.
-      timer = setTimeout(release, next?.type === "negotiation_started" ? 200 : PACE_MS);
+      const wait = instant ? 100 : batch[0]?.type === "negotiation_started" ? 200 : PACE_MS;
+      timer = setTimeout(release, wait);
     };
     let timer = setTimeout(release, 100);
 

@@ -15,13 +15,25 @@ import { API_URL } from "@/lib/useMatch";
 const inputClass = "h-11 bg-field text-base tabular-nums";
 
 const HOUSE_RULES = [
-  { value: "malaysian_chinese", label: "Malaysian-Chinese: favours 8, refuses 444" },
-  { value: "neutral", label: "Neutral: no lucky numbers" },
+  { value: "malaysian_chinese", label: "Malaysian-Chinese", hint: "Favours 8, refuses 4." },
+  { value: "neutral", label: "Neutral", hint: "No lucky or unlucky numbers." },
 ];
+
+const FIELD_NAMES: Record<string, string> = {
+  opening_ask: "opening ask",
+  seller_floor: "lowest price",
+  budget_cap: "budget cap",
+  max_rounds: "rounds",
+  item: "item",
+};
+
+function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 function Field({ label, name, defaultValue, hint }: { label: string; name: string; defaultValue: number; hint?: string }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid content-start gap-2">
       <Label htmlFor={name}>{label}</Label>
       <Input id={name} className={inputClass} name={name} type="number" min={1} max={10000000} step={1} required defaultValue={defaultValue} inputMode="numeric" />
       {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
@@ -29,10 +41,23 @@ function Field({ label, name, defaultValue, hint }: { label: string; name: strin
   );
 }
 
+/** Turns an API validation error into a plain sentence that uses the form's own labels. */
 function explain(detail: unknown): string {
   if (typeof detail === "string") return detail;
-  if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg).replace(/^Value error, /, "");
+  if (Array.isArray(detail) && detail[0]?.msg) {
+    const first = detail[0] as { msg: string; loc?: unknown[] };
+    const message = first.msg
+      .replace(/^Value error, /, "")
+      .replace(/opening_ask|seller_floor|budget_cap|max_rounds/g, (name) => FIELD_NAMES[name]);
+    const field = typeof first.loc?.[1] === "string" ? FIELD_NAMES[first.loc[1]] : undefined;
+    return field ? `${sentence(field)}: ${message.charAt(0).toLowerCase()}${message.slice(1)}` : sentence(message);
+  }
   return "The match could not start. Check the prices and try again.";
+}
+
+/** Catches the mistake we can see before any request is sent. */
+function checkPrices(floor: number, ask: number): string | null {
+  return ask < floor ? "The opening ask can't be below the lowest price." : null;
 }
 
 export function StartForm() {
@@ -45,6 +70,11 @@ export function StartForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const problem = checkPrices(Number(data.get("seller_floor")), Number(data.get("opening_ask")));
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -93,7 +123,7 @@ export function StartForm() {
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <div className="grid gap-2">
+        <div className="grid min-w-0 content-start gap-2">
           <Label>House rules</Label>
           <Select items={HOUSE_RULES} value={culture} onValueChange={(value) => setCulture(value ?? "neutral")}>
             <SelectTrigger className="h-11! w-full bg-field text-base">
@@ -105,6 +135,7 @@ export function StartForm() {
               ))}
             </SelectContent>
           </Select>
+          <p className="text-sm text-muted-foreground">{HOUSE_RULES.find((rule) => rule.value === culture)?.hint}</p>
         </div>
         <Field label="Rounds" name="max_rounds" defaultValue={6} />
       </div>
@@ -119,7 +150,7 @@ export function StartForm() {
 
       {error && (
         <Alert variant="destructive" className="border-live/60 bg-live/15">
-          <AlertDescription className="text-foreground">{error}</AlertDescription>
+          <AlertDescription className="text-foreground! text-base">{error}</AlertDescription>
         </Alert>
       )}
 

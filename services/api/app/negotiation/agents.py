@@ -168,7 +168,8 @@ class LLMAgent:
             self._brief(view)
             + f"\nThe referee has fixed your move: {decision.action}, price {decision.price}. "
             "Write one short, playful line of market banter saying this. "
-            "Do not mention any other number. Reply with only the line."
+            "Do not mention any other number, and do not promise extras, discounts or "
+            "anything else beyond the price. Reply with only the line."
         )
         response = await self._chat.ainvoke(prompt)
         return response.text if isinstance(response.text, str) else response.text()

@@ -52,6 +52,24 @@ async def test_buyer_returns_to_the_deal_page_after_paypal(h: Harness) -> None:
     assert h.gateway.return_urls == [f"{settings.frontend_url}/deals/{deal}"]
 
 
+async def test_repeated_approve_logs_once_and_makes_one_order(h: Harness) -> None:
+    deal = await h.deal()
+    await asyncio.gather(*(h.desk.run(deal, "approve") for _ in range(3)))
+    steps = [e.payload["step"] for e in await h.bus.log.read_after(deal) if e.type == "shield"]
+    assert steps == ["approve"]
+    assert h.gateway.calls.count("create_order") == 1
+    # Asking again later is still fine and still changes nothing.
+    assert (await h.desk.run(deal, "approve"))["state"] == "negotiated"
+
+
+async def test_state_view_reports_the_last_step_taken(h: Harness) -> None:
+    deal = await h.deal()
+    assert (await h.desk.view(deal))["step"] == "negotiated"
+    await h.desk.run(deal, "approve")
+    await h.desk.run(deal, "authorize")
+    assert (await h.desk.view(deal))["step"] == "authorize"
+
+
 async def test_full_flow_survives_reload_from_log(h: Harness) -> None:
     deal = await h.deal()
     assert (await h.desk.run(deal, "approve"))["state"] == "negotiated"

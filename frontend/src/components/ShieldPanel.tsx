@@ -51,10 +51,12 @@ function headline(view: ShieldView): string {
   }
 }
 
-function Tracker({ state }: { state: ShieldState }) {
+function Tracker({ state, shipped }: { state: ShieldState; shipped: boolean }) {
   const reduced = useReducedMotion();
-  const reached = state === "refunded" ? 4 : STEPS.findIndex((step) => step.state === state);
-  const progress = state === "voided" ? 0 : Math.max(reached, 0) / (STEPS.length - 1);
+  // A voided hold was authorized at least, and was shipped if a tracking number was recorded.
+  const reached =
+    state === "refunded" ? STEPS.length - 1 : state === "voided" ? (shipped ? 2 : 1) : STEPS.findIndex((step) => step.state === state);
+  const progress = Math.max(reached, 0) / (STEPS.length - 1);
   return (
     <div className="relative">
       <div className="absolute inset-x-[10%] top-5 h-1 bg-line" aria-hidden>
@@ -67,9 +69,11 @@ function Tracker({ state }: { state: ShieldState }) {
       </div>
       <ol className="relative grid grid-cols-5">
         {STEPS.map((step, index) => {
-          const done = state !== "voided" && index <= reached;
+          const done = index <= reached;
           const current = state === step.state;
-          const Icon = step.icon;
+          // After a refund the last step tells the truth instead of still saying "Paid".
+          const refunded = state === "refunded" && index === STEPS.length - 1;
+          const Icon = refunded ? RotateCcw : step.icon;
           return (
             <li key={step.state} aria-current={current ? "step" : undefined} className="grid justify-items-center gap-2 text-center">
               <motion.span
@@ -80,7 +84,7 @@ function Tracker({ state }: { state: ShieldState }) {
               >
                 <Icon className="size-5" aria-hidden />
               </motion.span>
-              <span className={`text-sm ${done ? "font-semibold" : "text-muted-foreground"}`}>{step.label}</span>
+              <span className={`text-sm ${done ? "font-semibold" : "text-muted-foreground"}`}>{refunded ? "Refunded" : step.label}</span>
             </li>
           );
         })}
@@ -158,7 +162,7 @@ export function ShieldPanel({ dealId }: { dealId: string }) {
             </AnimatePresence>
           </div>
 
-          <Tracker state={state} />
+          <Tracker state={state} shipped={Boolean(view.tracking_number)} />
 
           {error && (
             <Alert variant="destructive" className="border-live/60 bg-live/15 text-foreground">
