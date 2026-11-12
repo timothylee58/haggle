@@ -10,7 +10,8 @@ The rules, all enforced in code:
 - Face is per pair. A buyer who insults or lowballs the seller loses the seller's patience and is
   thrown out, while the others carry on.
 - The last round is sealed: each buyer makes a forced final bid, and the highest bid at or above the
-  floor wins. Ties go to whoever reached that price first.
+  floor wins. Ties go to the buyer who held the higher bid going into that round, then to whoever
+  reached the price first.
 """
 
 import logging
@@ -101,6 +102,7 @@ class _Seat:
     bidder: Bidder
     bid: int | None = None
     bid_turn: int = 0  # the turn the current bid was placed, for tie-breaks
+    carried: int = 0  # the bid held going into the sealed final round; breaks final-round ties
     face: int = STARTING_FACE
     patience: int = STARTING_FACE
     state: str = "bidding"  # bidding | walked | thrown_out | won
@@ -120,8 +122,9 @@ class _War:
 
     def leader(self) -> _Seat | None:
         bidding = [s for s in self.active() if s.bid is not None]
-        # Highest bid wins; on a tie, whoever reached it first.
-        return max(bidding, key=lambda s: (s.bid or 0, -s.bid_turn), default=None)
+        # Highest bid wins. A tie goes to the buyer who held the higher bid going into the sealed
+        # final round (before then everyone's is 0), then to whoever reached the price first.
+        return max(bidding, key=lambda s: (s.bid or 0, s.carried, -s.bid_turn), default=None)
 
     def top_bid(self) -> int | None:
         """The best live bid for display. Unlike leader(), it still counts a buyer who just won."""
@@ -250,6 +253,9 @@ async def run_bidding_war(
     for rnd in range(1, config.max_rounds + 1):
         final = rnd == config.max_rounds
         war.round = rnd
+        if final:
+            for seat in war.active():
+                seat.carried = seat.bid or 0
 
         for seat in list(war.active()):
             view = buyer_view(seat, final, rnd)

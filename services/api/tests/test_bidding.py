@@ -135,6 +135,29 @@ async def test_a_tie_goes_to_whoever_reached_the_price_first() -> None:
     assert events[-1].winner == "b0"
 
 
+async def test_a_final_round_tie_goes_to_the_buyer_who_led_going_in() -> None:
+    # Both can afford the ask, so both seal a bid at the ask. b0 acts first, but b1 led all game.
+    cfg = config([1500, 1500], floor=700, ask=1300)
+    agents = {
+        "b0": Scripted(Proposal(action=Action.OFFER, price=800)),
+        "b1": Scripted(Proposal(action=Action.OFFER, price=860)),
+    }
+    events = await run(cfg, agents)
+    finals = {e.bidder: e.price for e in events if e.round == 6 and e.side is Side.BUYER}
+    assert finals["b0"] == finals["b1"], "setup: the final bids must tie"
+    assert events[-1].status is Status.DEAL
+    assert events[-1].winner == "b1"
+
+
+async def test_a_tie_between_equal_leaders_still_goes_to_the_earlier_bid() -> None:
+    # Same standing bid going in, so the old rule still decides: whoever reached the price first.
+    cfg = config([1500, 1500], floor=700, ask=1300)
+    same = Proposal(action=Action.OFFER, price=860)
+    events = await run(cfg, {"b0": Scripted(same), "b1": Scripted(same)})
+    assert events[-1].status is Status.DEAL
+    assert events[-1].winner == "b0"
+
+
 async def test_no_bid_reaching_the_floor_means_no_deal() -> None:
     cfg = config([600, 650], floor=700)
     events = await run(cfg, rule_buyers(cfg))
