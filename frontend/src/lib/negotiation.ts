@@ -146,11 +146,15 @@ export function seatsOf(match: Match): Seat[] {
   return match.bidders.map((b) => ({ ...b, bid: null, face: 70, patience: 70, state: "bidding" as const }));
 }
 
-/** The best live bid. A tie goes to the seat listed first, as the earlier bidder usually is. */
+/**
+ * The best live bid. The seat the server ruled the winner always leads, so a final-round tie shows the
+ * right name. Otherwise a tie goes to the seat listed first, as the earlier bidder usually is.
+ */
 export function leadingSeat(seats: Seat[]): Seat | null {
   let best: Seat | null = null;
   for (const seat of seats) {
     if (seat.bid === null || (seat.state !== "bidding" && seat.state !== "won")) continue;
+    if (seat.state === "won") return seat;
     if (best === null || seat.bid > (best.bid ?? 0)) best = seat;
   }
   return best;

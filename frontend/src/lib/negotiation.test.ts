@@ -52,6 +52,8 @@ describe("bidding war state", () => {
     expect(leadingSeat([seat("a", 700), seat("b", 760)])?.id).toBe("b");
     expect(leadingSeat([seat("a", 800, "thrown_out"), seat("b", 760)])?.id).toBe("b");
     expect(leadingSeat([seat("a", 760), seat("b", 760)])?.id).toBe("a");
+    // The server's winner leads even when a tied seat is listed before it.
+    expect(leadingSeat([seat("a", 760), seat("b", 760, "won")])?.id).toBe("b");
     expect(leadingSeat([seat("a", null)])).toBeNull();
   });
   it("names the winner in the headline", () => {
