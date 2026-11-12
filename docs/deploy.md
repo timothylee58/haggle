@@ -26,11 +26,10 @@ To run on free instances anyway for a quick look: set `plan: free` on both web s
 1. Push this repo to GitHub (done: it is public).
 2. In Render: **New > Blueprint**, pick the repo, and Render reads `render.yaml`.
 3. Render asks for the values marked `sync: false`. Fill what you have, leave the rest blank:
-   - `FRONTEND_URL`: the web app's address. You do not know it yet. Put a placeholder like `https://haggle-web.onrender.com` (Render's default is `https://<service-name>.onrender.com`, and a name clash gets a suffix) and fix it in step 5 if it differs.
-   - `NEXT_PUBLIC_API_URL`: the API's address, for the same reason, e.g. `https://haggle-api.onrender.com`.
+   - `FRONTEND_URL` and `NEXT_PUBLIC_API_URL`: you do not know either address yet, so put any placeholder and fix both in step 5. **Do not type a guess like `https://haggle-api.onrender.com` and leave it.** Render service names are global: if another account already owns `haggle-api`, yours is deployed as `haggle-api-xxxx`, and the unsuffixed address belongs to a stranger. A web app built against it sends your visitors' data to them.
    - Optional keys: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `CHANNEL3_API_KEY`.
 4. Click **Apply**. The database and Key Value start first, then the API (migrations run before it goes live), then the web app.
-5. Open each service's page and copy its real `onrender.com` address. If either differs from what you typed, correct `FRONTEND_URL` on the API and `NEXT_PUBLIC_API_URL` on the web app, then **redeploy the web app**. `NEXT_PUBLIC_API_URL` is baked in when Next.js builds, so changing it without a rebuild does nothing.
+5. Open each service's page and copy its real `onrender.com` address from the dashboard. Set `FRONTEND_URL` on the API to the web address and `NEXT_PUBLIC_API_URL` on the web app to the API address, then **redeploy the web app with "Clear build cache & deploy"**. `NEXT_PUBLIC_API_URL` is baked in when Next.js builds, so changing it without a rebuild does nothing.
 6. Visit `<api>/health` (expect `{"status":"ok"}`) and `<api>/features`, then the web app, and start a match.
 
 ## Environment variables
@@ -80,6 +79,7 @@ Behaviour: the key stays on the server; each distinct search is cached for an ho
 
 ## After deploying
 
+- Confirm the web app points at your API: open the web app's `/play` in a browser, then check the network tab for calls to `<your api>/features`. A call to any other host means `NEXT_PUBLIC_API_URL` is wrong.
 - Run a match with `use_llm` on and watch the `LLM_MATCHES_PER_DAY` counter work: the Claude switch should disable itself once the cap is hit.
 - Open a match link in a private window and confirm the Shield shows "You're watching" with no action buttons.
 - The first request after a long idle can be slow on any plan that sleeps.
